@@ -1,0 +1,81 @@
+name: Buduj instalatory
+
+# Instalatory budują się TYLKO na wyraźne polecenie (Actions → Buduj instalatory → Run workflow albo
+# umiejętność `wydanie`), a nie przy każdym wypchnięciu. Repozytorium jest publiczne, więc budowanie nic nie kosztuje.
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: 'Dla jakiego systemu (win / mac / oba)'
+        default: 'oba'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || ! gh release view "v$V" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; echo "Buduję wersję $V"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"; echo "Wydanie v$V już istnieje — pomijam budowanie"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        # Mac budujemy na maszynie z Intelem — tych GitHub ma więcej; dmg i tak powstaje dla arm64 i x64
+        os: ${{ fromJSON(inputs.os == 'win' && '["windows-latest"]' || inputs.os == 'mac' && '["macos-15-intel"]' || '["macos-15-intel","windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      # na maszynach GitHuba XProtect potrafi trzymać obraz dysku i hdiutil nie może go odłączyć
+      - name: Zatrzymaj XProtect
+        if: runner.os == 'macOS'
+        run: sudo pkill -9 XProtect >/dev/null 2>&1 || true; while pgrep XProtect >/dev/null; do sleep 2; done
+      # hdiutil na Macu czasem nie może odłączyć obrazu („Resource busy”) — wtedy próbujemy jeszcze dwa razy
+      - shell: bash
+        run: |
+          for i in 1 2 3; do
+            npx electron-builder --publish never && exit 0
+            echo "Próba $i nieudana, ponawiam"; sudo pkill -9 XProtect >/dev/null 2>&1 || true
+            hdiutil info | awk '/\/dev\/disk[0-9]+/{print $1}' | sort -u | xargs -n1 hdiutil detach -force >/dev/null 2>&1 || true
+            sleep 15
+          done
+          exit 1
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      # każdy system dokłada swój instalator do wydania od razu, bez czekania na drugi
+      - name: Dołącz do wydania
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Blat ${{ needs.check.outputs.version }}
+          make_latest: true
+          files: |
+            dist/*.dmg
+            dist/*.exe
+          fail_on_unmatched_files: false

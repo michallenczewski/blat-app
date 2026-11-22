@@ -1,0 +1,20 @@
+// Słownik angielski: klucz = napis polski z _t(...). Sprawdza go scripts/tlumaczenia.mjs.
+window.BLAT_EN = {
+  'Tablice': 'Boards', 'Tablice w': 'Boards in', 'Nowa tablica': 'New board', 'Pierwsza tablica': 'First board',
+  'Tryb jasny': 'Light mode', 'Tryb ciemny': 'Dark mode', 'Notatka': 'Note', 'Ramka': 'Frame', 'Zaznaczanie': 'Select',
+  'element': 'item', 'elementy': 'items', 'elementów': 'items',
+  'zapisuję…': 'saving…', 'zapisane': 'saved', 'nie udało się zapisać': 'could not save',
+  'Zmień nazwę…': 'Rename…', 'Pokaż w Finderze': 'Show in Finder', 'Pokaż w Eksploratorze': 'Show in Explorer', 'Przenieś do kosza': 'Move to Trash',
+  'Nie udało się otworzyć tablicy': 'Could not open the board', 'Tablica o tej nazwie już istnieje': 'A board with this name already exists',
+  'Dodaję obrazy…': 'Adding images…', 'Dodaję obraz…': 'Adding image…', 'Tego formatu Blat jeszcze nie czyta': 'Blat cannot read this format yet',
+  'Dodane obrazy': 'Images added', 'Dodany obraz': 'Image added', 'Zaznacz co najmniej dwa obrazy': 'Select at least two images',
+  'Ułóż': 'Arrange', 'Ramka wokół zaznaczonych': 'Frame around selection', 'Na wierzch': 'Bring to front', 'Na spód': 'Send to back',
+  'Pokaż': 'Show', 'Usuń': 'Delete', 'Wklej': 'Paste', 'Pokaż wszystko': 'Show all',
+  'Upuść tutaj obrazy': 'Drop images here', 'Upuść tutaj': 'Drop here', 'Nie udało się pobrać obrazu z przeglądarki': 'Could not download the image from the browser',
+  'Schowek jest pusty': 'The clipboard is empty', 'Blat zostaje na wierzchu': 'Blat stays on top', 'Blat zachowuje się jak zwykłe okno': 'Blat behaves like a normal window',
+  'Puste płótno': 'Empty canvas',
+  'Przeciągnij obrazy z Gapy, Eksploratora albo przeglądarki, albo wklej je ze schowka.': 'Drag images from Gapa, Explorer or a web browser, or paste them from the clipboard.',
+  'wklej': 'paste', 'notatka': 'note', 'ramka': 'frame', 'Spacja': 'Space', 'przesuwanie płótna': 'pan the canvas',
+  'Panel boczny': 'Sidebar', 'Ułóż zaznaczone': 'Arrange selection', 'Zawsze na wierzchu': 'Always on top', 'Dwuklik zmienia nazwę': 'Double-click to rename',
+  'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
+};

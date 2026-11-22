@@ -1,0 +1,26 @@
+// Blat — most między oknem a procesem głównym. Wersja przeglądarkowa (do testów) ma ten sam zestaw w renderer/web-api.js.
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
+contextBridge.exposeInMainWorld('api', {
+  platform: process.platform,
+  web: false,
+  boardsList: () => ipcRenderer.invoke('boards-list'),
+  boardLoad: n => ipcRenderer.invoke('board-load', n),
+  boardNew: base => ipcRenderer.invoke('board-new', base),
+  boardSave: (n, b) => ipcRenderer.invoke('board-save', n, b),
+  boardRename: (a, b) => ipcRenderer.invoke('board-rename', a, b),
+  boardTrash: n => ipcRenderer.invoke('board-trash', n),
+  boardReveal: n => ipcRenderer.invoke('board-reveal', n),
+  imagePut: (n, file, bytes) => ipcRenderer.invoke('image-put', n, file, bytes),
+  imagesPrune: (n, keep) => ipcRenderer.invoke('images-prune', n, keep),
+  imageUrl: (n, file) => 'blat://b/' + encodeURIComponent(n) + '/' + encodeURIComponent(file),
+  filePath: f => { try { return webUtils.getPathForFile(f); } catch (e) { return ''; } },
+  fileRead: p => ipcRenderer.invoke('file-read', p),
+  setOnTop: v => ipcRenderer.send('on-top', v),
+  setSide: v => ipcRenderer.send('side', v),
+  uiState: () => ipcRenderer.invoke('ui-state'),
+  chromeColors: (bg, fg) => ipcRenderer.send('chrome-colors', bg, fg),
+  updateGet: () => ipcRenderer.invoke('update-get'),
+  updateCheck: () => ipcRenderer.invoke('update-check'),
+  updateInstall: () => ipcRenderer.invoke('update-install'),
+  onUpdateStatus: cb => ipcRenderer.on('update-status', (e, s) => cb(s)),
+});
