@@ -77,5 +77,6 @@ jobs:
           make_latest: true
           files: |
             dist/*.dmg
+            dist/*.zip
             dist/*.exe
           fail_on_unmatched_files: false
