@@ -715,6 +715,12 @@ window.blatTest = {
     { const de = document.documentElement, was = [...de.classList].find(c => c.startsWith('frame-')); de.classList.replace(was, 'frame-mac');
       ok(Math.abs(main.getBoundingClientRect().top) < 1, 'na Macu w trybie bez nawigacji płótno sięga górnej krawędzi'); de.classList.replace('frame-mac', was); }
     this.bare(false); ok(getComputedStyle($('header')).display !== 'none' && Math.abs(main.getBoundingClientRect().width - mw) < 2, 'powrót interfejsu');
+    // okno da się przesuwać: niewidoczna warstwa z no-drag nie może leżeć nad paskiem (Electron liczy obszary przeciągania bez względu na przezroczystość)
+    { const hr = $('header').getBoundingClientRect(), bad = [...document.querySelectorAll('body *')].filter(el => {
+        const cs = getComputedStyle(el); if (cs.getPropertyValue('-webkit-app-region') !== 'no-drag' || el.closest('header')) return false;
+        const hidden = cs.opacity === '0' || cs.pointerEvents === 'none' || cs.visibility === 'hidden'; if (!hidden || cs.display === 'none') return false;
+        const r = el.getBoundingClientRect(); return r.width && r.height && r.left < hr.right && r.right > hr.left && r.top < hr.bottom && r.bottom > hr.top; });
+      ok(!bad.length, 'pasek okna nie jest zasłonięty niewidoczną warstwą (' + bad.map(e => e.id || e.className).join(', ') + ')'); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();

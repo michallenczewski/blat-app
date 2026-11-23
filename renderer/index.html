@@ -97,15 +97,17 @@ body.bare::before{content:"";grid-row:1;grid-column:1;-webkit-app-region:drag}
 .fs.frame-mac body.bare::before{display:none}
 body.bare header,body.bare aside{display:none}
 body.bare main{grid-row:2;grid-column:1;border-radius:0;box-shadow:none}
-#fspill{-webkit-app-region:no-drag;position:fixed;top:10px;right:12px;z-index:60;display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--card);box-shadow:0 0 0 1px var(--cardline),0 6px 20px rgba(0,0,0,.14);opacity:0;pointer-events:none;transition:opacity .2s}
+#fspill{position:fixed;top:10px;right:12px;z-index:60;display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--card);box-shadow:0 0 0 1px var(--cardline),0 6px 20px rgba(0,0,0,.14);opacity:0;pointer-events:none;transition:opacity .2s}
 .frame-win body.bare #fspill{top:44px}
 .fs.frame-win body.bare #fspill{top:10px}
 body.bare.moving #fspill,body.bare #fspill:hover{opacity:1;pointer-events:auto}
 .fsb svg+svg,.fs .fsb svg:first-child{display:none}
 .fs .fsb svg+svg{display:block}
 /* ściąga skrótów (?) — ta sama co w Gapie: klawisze ułożone jak na klawiaturze */
-#keys{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity .15s;-webkit-app-region:no-drag}
-#keys.on{opacity:1;pointer-events:auto}
+#keys{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity .15s}
+/* no-drag tylko gdy widoczne: Electron liczy obszary przeciągania także dla niewidocznych warstw */
+#keys.on{opacity:1;pointer-events:auto;-webkit-app-region:no-drag}
+body.bare #fspill{-webkit-app-region:no-drag}
 #keys .kc{background:var(--card);border-radius:16px;box-shadow:0 0 0 1px var(--cardline),0 24px 60px rgba(0,0,0,.22);padding:24px 26px 22px;max-width:calc(100vw - 40px)}
 #keys .kh{display:flex;justify-content:space-between;align-items:baseline;gap:24px;margin-bottom:18px}
 #keys .kh b{font-weight:500;font-size:15px;color:var(--text)}
