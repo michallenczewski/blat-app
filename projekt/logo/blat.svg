@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160"><title>Blat</title>
+<rect width="160" height="160" rx="38" fill="#FF6B1A"/>
+<g stroke="#161616" stroke-width="24" stroke-linecap="round" fill="none"><path d="M62 44 V128 M98 44 V128 M38 68 H122 M38 104 H122"/><path d="M62 41 V125 M98 41 V125 M38 65 H122 M38 101 H122"/><path d="M62 38 V122 M98 38 V122 M38 62 H122 M38 98 H122"/></g>
+<path d="M62 36 V120 M98 36 V120 M38 60 H122 M38 96 H122" stroke="#ECEBE6" stroke-width="15" stroke-linecap="round" fill="none"/>
+</svg>

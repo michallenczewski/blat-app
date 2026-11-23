@@ -11,6 +11,14 @@
 - `scripts/serve.mjs` — serwer do testów w przeglądarce; `scripts/tlumaczenia.mjs` — sprawdzenie słownika.
 - `build/` — ikony i podpisywanie ad hoc na Macu; `.github/workflows/build.yml` — budowanie instalatorów na żądanie.
 
+## Tryb bez nawigacji i pełny ekran
+
+Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tablic. Zostaje wąski pasek na przyciski okna (40 px na Macu, 36 px na Windows). Pełny ekran (⌃⌘F, Ctrl+spacja) włączony z programu od razu chowa interfejs, a po wyjściu przywraca poprzedni stan. Pastylka w prawym górnym rogu pojawia się przy ruchu myszy. Widok przesuwamy o różnicę położenia płótna, żeby obrazy nie przeskakiwały.
+
+## Ikona
+
+Źródło to `projekt/logo/blat.svg` (wypchnięta kratka na #FF6B1A, wspólna rodzina z Gapą i Modo). `build/icon.png` (1024 px, kwadrat 824 px według siatki Apple), `build/icon-win.png` (256 px) i `renderer/favicon.png` (64 px) renderujemy z niego przez `rsvg-convert`.
+
 ## Format tablicy
 
 Tablice leżą w `Dokumenty/Blat/`. Każda to folder `<Nazwa>.blat`:

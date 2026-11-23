@@ -20,6 +20,8 @@ const IC = {
   pin: svg('<path d="M6 2.5h4M8 2.5v5M5 7.5h6l-1 3H6zM8 10.5v3"/>'),
   plus: svg('<path d="M8 3v10M3 8h10"/>', 13),
   moon: svg('<path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/>'),
+  ui: svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.2h12"/>'),
+  fs: svg('<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>') + svg('<path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/>'),
   sun: svg('<circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.5M8 12.9v1.5M3.5 3.5l1 1M11.5 11.5l1 1M1.6 8h1.5M12.9 8h1.5M3.5 12.5l1-1M11.5 4.5l1-1"/>'),
 };
 
@@ -54,7 +56,7 @@ function applyTheme() {
   $('#themeBtn').innerHTML = t === 'dark' ? IC.sun : IC.moon;
   $('#themeBtn').title = _t(t === 'dark' ? 'Tryb jasny' : 'Tryb ciemny');
   const cs = getComputedStyle(document.documentElement);
-  if (api.chromeColors) api.chromeColors(cs.getPropertyValue('--bg').trim(), cs.getPropertyValue('--text2').trim());
+  if (api.chromeColors) api.chromeColors(cs.getPropertyValue('--bg').trim(), cs.getPropertyValue('--text2').trim(), isBare() && !isFs() ? 36 : 52);
 }
 
 /* ---------- rysowanie elementów ---------- */
@@ -443,7 +445,8 @@ main.addEventListener('contextmenu', e => {
   ] : [
     [_t('Notatka'), () => addNote(p), 'T'],
     [_t('Wklej'), () => pasteFromClipboard(p), MOD + 'V'],
-    [_t('Pokaż wszystko'), () => fit(), '0']
+    [_t('Pokaż wszystko'), () => fit(), '0'],
+    '-', [_t(isBare() ? 'Pokaż interfejs' : 'Ukryj interfejs'), () => toggleBare(), 'Tab']
   ]);
 });
 function reorder(d) {
@@ -509,6 +512,8 @@ function setTool(t) {
 addEventListener('keydown', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable)) return;
   const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey;
+  // pełny ekran: Ctrl+spacja na Windows (na Macu systemowe ⌃⌘F); Esc wychodzi, jeśli pełny ekran włączono stąd
+  if (!isMac && e.ctrlKey && !e.shiftKey && !e.altKey && k === ' ' && !e.repeat && !spaceDown) { e.preventDefault(); fullscreenToggle(); return; }
   if (k === ' ' && !spaceDown) { spaceDown = true; main.classList.add('space'); e.preventDefault(); return; }
   if (mod && k === 'z') { e.preventDefault(); undo(e.shiftKey); return; }
   if (mod && k === 'y') { e.preventDefault(); undo(true); return; }
@@ -520,7 +525,7 @@ addEventListener('keydown', e => {
   if (mod && k === 's') { e.preventDefault(); dirty = true; saveNow(); return; }
   if (mod) return;
   if (k === 'delete' || k === 'backspace') { e.preventDefault(); removeSel(); }
-  else if (k === 'escape') { sel.clear(); setTool('select'); drawAll(); hideMenu(); }
+  else if (k === 'escape') { if (isFs() && fsBare !== null && !sel.size && tool === 'select') fullscreenToggle(); sel.clear(); setTool('select'); drawAll(); hideMenu(); }
   else if (k === 'v') setTool('select');
   else if (k === 't') setTool('note');
   else if (k === 'f') setTool('frame');
@@ -529,7 +534,7 @@ addEventListener('keydown', e => {
   else if (k === '0') fit();
   else if (k === '1') zoomAt(1 / board.view.z);
   else if (k === 'z') sel.size ? fit(selItems()) : fit();
-  else if (k === 'tab') { e.preventDefault(); toggleSide(); }
+  else if (k === 'tab') { e.preventDefault(); toggleBare(); }
   else if (k.startsWith('arrow') && sel.size) {
     e.preventDefault(); snapshot();
     const s = e.shiftKey ? 50 : 5, dx = k === 'arrowleft' ? -s : k === 'arrowright' ? s : 0, dy = k === 'arrowup' ? -s : k === 'arrowdown' ? s : 0;
@@ -559,6 +564,36 @@ addEventListener('pointerdown', e => { if (!e.target.closest('#menu')) hideMenu(
 
 /* ---------- pasek, panel boczny ---------- */
 function toggleSide(v) { const on = v == null ? document.body.classList.contains('noside') : v; document.body.classList.toggle('noside', !on); if (v == null) api.setSide(on); }
+// tryb bez nawigacji (jak w Gapie): Tab chowa pasek i listę tablic, zostaje samo płótno
+const isBare = () => document.body.classList.contains('bare');
+const isFs = () => document.documentElement.classList.contains('fs');
+function toggleBare(v) {
+  const r0 = main.getBoundingClientRect();
+  document.body.classList.toggle('bare', v == null ? !isBare() : !!v);
+  // płótno zostaje w tym samym miejscu na ekranie, choć zmienia rozmiar
+  const r1 = main.getBoundingClientRect();
+  if (board) { board.view.x += r0.left - r1.left; board.view.y += r0.top - r1.top; applyView(); }
+  if (api.setBare) api.setBare(isBare());
+  applyTheme(); pillTips();
+  if (v == null) tip(isBare() ? _t('Tab pokazuje interfejs') : _t('Interfejs widoczny'));
+}
+let fsBare = null;
+function fullscreenToggle() {
+  if (api.fullscreenToggle) api.fullscreenToggle();
+  else if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
+}
+// pełny ekran (skrót, pastylka, ⌃⌘F albo zielony przycisk na Macu) od razu chowa interfejs; po wyjściu wraca poprzedni stan
+function onFullscreen(v) {
+  document.documentElement.classList.toggle('fs', v);
+  if (v && fsBare === null) { fsBare = isBare(); if (!fsBare) toggleBare(true); }
+  else if (!v && fsBare !== null) { if (!fsBare) toggleBare(false); fsBare = null; }
+  applyTheme(); pillTips();
+}
+const FSK = isMac ? '⌃⌘F' : 'Ctrl+' + _t('spacja');
+function pillTips() {
+  $('#pillUi').title = _t('Pokaż interfejs') + ' (Tab)';
+  $('#pillFs').title = isFs() ? _t('Wyjdź z pełnego ekranu') + ' (' + FSK + ' / Esc)' : _t('Pełny ekran') + ' (' + FSK + ')';
+}
 let onTop = false;
 function toggleTop(v) { onTop = v == null ? !onTop : v; $('#topBtn').classList.toggle('on', onTop); if (v == null) { api.setOnTop(onTop); tip(onTop ? _t('Blat zostaje na wierzchu') : _t('Blat zachowuje się jak zwykłe okno')); } }
 function emptyTexts() {
@@ -569,7 +604,7 @@ function emptyTexts() {
 function initUi() {
   document.documentElement.classList.add(api.web ? 'frame-web' : isMac ? 'frame-mac' : 'frame-win');
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = _t(el.dataset.t);
-  $('#sideBtn').innerHTML = IC.side; $('#sideBtn').title = _t('Panel boczny') + ' (Tab)'; $('#sideBtn').onclick = () => toggleSide();
+  $('#sideBtn').innerHTML = IC.side; $('#sideBtn').title = _t('Panel boczny'); $('#sideBtn').onclick = () => toggleSide();
   $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowa tablica') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż zaznaczone') + ' (A)'; $('#arrangeBtn').onclick = arrange;
   $('#topBtn').innerHTML = IC.pin; $('#topBtn').title = _t('Zawsze na wierzchu') + ' (P)'; $('#topBtn').onclick = () => toggleTop();
@@ -580,7 +615,13 @@ function initUi() {
   const tools = [['select', IC.select, 'Zaznaczanie', 'V'], ['note', IC.note, 'Notatka', 'T'], ['frame', IC.frame, 'Ramka', 'F']];
   $('#tools').innerHTML = tools.map(([t, ic, n, k]) => '<button class="ib" data-tool="' + t + '" title="' + _t(n) + ' (' + k + ')">' + ic + '</button>').join('');
   for (const b of document.querySelectorAll('#tools .ib')) b.onclick = () => setTool(b.dataset.tool);
-  setTool('select'); emptyTexts(); applyTheme();
+  // pastylka w trybie bez nawigacji: pojawia się przy ruchu myszy, znika po dwóch sekundach
+  $('#pillUi').innerHTML = IC.ui; $('#pillUi').onclick = e => { e.stopPropagation(); toggleBare(false); };
+  $('#pillFs').innerHTML = IC.fs; $('#pillFs').onclick = e => { e.stopPropagation(); fullscreenToggle(); };
+  let idleT = 0;
+  addEventListener('mousemove', () => { document.body.classList.add('moving'); clearTimeout(idleT); idleT = setTimeout(() => document.body.classList.remove('moving'), 2000); }, { passive: true });
+  if (api.onFullscreen) api.onFullscreen(onFullscreen); else document.addEventListener('fullscreenchange', () => onFullscreen(!!document.fullscreenElement));
+  setTool('select'); emptyTexts(); applyTheme(); pillTips();
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
   addEventListener('beforeunload', () => { if (dirty) api.boardSave(board.name, board); });
   // aktualizacje: dyskretna informacja w panelu bocznym
@@ -612,6 +653,7 @@ window.blatTest = {
   selectAll: () => { sel = new Set(board.items.map(i => i.id)); drawAll(); },
   move: (dx, dy) => { snapshot(); for (const o of [...movingSet()].map(byId)) { o.x += dx; o.y += dy; } drawAll(); changed(); },
   frame: name => { frameAround(selItems()); const f = selItems()[0]; const inp = f && els.get(f.id).querySelector('input'); if (inp) { if (name) inp.value = name; inp.blur(); } return f && f.id; },
+  bare: v => { toggleBare(v); return isBare(); },
   arrange, fit: () => fit(), zoom: f => zoomAt(f), undo: () => undo(false), redo: () => undo(true), remove: removeSel,
   save: () => { dirty = true; return saveNow(); }, open: openBoard, newBoard: async name => { await saveNow(); setBoard(await api.boardNew(name || 'Test')); return board.name; },
   // sprawdziany (umiejętność `sprawdziany`): każdy zgłoszony błąd dopisujemy tu jako przypadek; zwraca listę porażek
@@ -633,6 +675,10 @@ window.blatTest = {
     await this.save(); const back = await api.boardLoad(name);
     ok(back && back.items.length === board.items.length, 'zapis i ponowne wczytanie');
     this.select([n]); this.remove(); ok(!byId(n), 'usunięcie'); this.undo(); ok(!!byId(n), 'cofnięcie usunięcia');
+    const mw = main.getBoundingClientRect().width; this.bare(true);
+    ok(getComputedStyle($('header')).display === 'none' && getComputedStyle($('aside')).display === 'none', 'tryb bez nawigacji chowa pasek i listę tablic');
+    ok(main.getBoundingClientRect().width > mw && Math.abs(main.getBoundingClientRect().width - innerWidth) < 2, 'płótno w trybie bez nawigacji zajmuje całą szerokość');
+    this.bare(false); ok(getComputedStyle($('header')).display !== 'none' && Math.abs(main.getBoundingClientRect().width - mw) < 2, 'powrót interfejsu');
     await api.boardTrash(name); await refreshBoards();
     return fail;
   },

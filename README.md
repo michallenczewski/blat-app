@@ -15,7 +15,8 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | spacja albo ⌥ + przeciąganie | spacja albo Alt + przeciąganie | przesuwanie widoku |
 | ⌘ + kółko | Ctrl + kółko | przybliżanie |
 | P | P | zawsze na wierzchu |
-| Tab | Tab | lista tablic |
+| Tab | Tab | tryb bez nawigacji: samo płótno, bez paska i listy tablic |
+| ⌃⌘F | Ctrl+spacja | pełny ekran (Esc wychodzi) |
 
 ## Rozwój
 

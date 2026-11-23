@@ -108,10 +108,15 @@ ipcMain.handle('file-read', async (e, p) => {
 ipcMain.on('on-top', (e, v) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.setAlwaysOnTop(!!v, 'floating'); settings.onTop = !!v; saveSettings(); });
 ipcMain.on('side', (e, v) => { settings.side = !!v; saveSettings(); });
 ipcMain.handle('ui-state', () => ({ side: settings.side !== false, onTop: !!settings.onTop }));
-ipcMain.on('chrome-colors', (e, bg, fg) => {
+// h: wysokość paska z przyciskami okna na Windows (52 px zwykle, 36 px w trybie bez nawigacji)
+ipcMain.on('chrome-colors', (e, bg, fg, h) => {
   const w = BrowserWindow.fromWebContents(e.sender);
-  if (isWin && w) try { w.setTitleBarOverlay({ color: bg, symbolColor: fg, height: 52 }); } catch (err) {}
+  if (isWin && w) try { w.setTitleBarOverlay({ color: bg, symbolColor: fg, height: h || 52 }); } catch (err) {}
 });
+// tryb bez nawigacji: na Macu przyciski okna schodzą na węższy pasek (40 px zamiast 52 px)
+ipcMain.on('bare', (e, v) => { const w = BrowserWindow.fromWebContents(e.sender); if (isMac && w && w.setWindowButtonPosition) try { w.setWindowButtonPosition(v ? { x: 14, y: 13 } : { x: 18, y: 19 }); } catch (err) {} });
+// pełny ekran 100% (bez paska zadań i paska okna): Ctrl+spacja na Windows, ⌃⌘F na Macu — jak w Gapie
+ipcMain.on('fullscreen-toggle', e => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.setFullScreen(!w.isFullScreen()); });
 
 /* ---------- aktualizacje (jak w Gapie) ---------- */
 const REPO = 'michallenczewski/blat-app';
@@ -167,6 +172,8 @@ function createWindow() {
   win.once('ready-to-show', () => win.show());
   const remember = () => { if (!win.isMaximized() && !win.isMinimized()) settings.bounds = win.getBounds(); settings.maximized = win.isMaximized(); saveSettings(); };
   win.on('resize', remember); win.on('move', remember);
+  win.on('enter-full-screen', () => win.webContents.send('fullscreen', true));
+  win.on('leave-full-screen', () => win.webContents.send('fullscreen', false));
   // linki otwierają się w przeglądarce, nie w oknie Blatu
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', e => e.preventDefault());

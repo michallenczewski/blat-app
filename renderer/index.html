@@ -87,6 +87,20 @@ main.tool-frame{cursor:crosshair}
 #menu hr{border:0;height:1px;background:var(--line);margin:4px 6px}
 #tip{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--text);color:var(--bg);font-size:12px;padding:6px 12px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:90}
 #tip.on{opacity:.92}
+/* tryb bez nawigacji (Tab, jak w Gapie): samo płótno; wąski pasek u góry zostaje na przyciski okna i przesuwanie okna */
+body.bare{grid-template-columns:minmax(0,1fr);grid-template-rows:0 minmax(0,1fr)}
+.frame-mac body.bare{grid-template-rows:40px minmax(0,1fr)}
+.frame-win body.bare{grid-template-rows:36px minmax(0,1fr)}
+.fs body.bare{grid-template-rows:0 minmax(0,1fr)}
+body.bare::before{content:"";grid-row:1;grid-column:1;-webkit-app-region:drag}
+body.bare header,body.bare aside{display:none}
+body.bare main{grid-row:2;grid-column:1;border-radius:0;box-shadow:none}
+#fspill{-webkit-app-region:no-drag;position:fixed;top:10px;right:12px;z-index:60;display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--card);box-shadow:0 0 0 1px var(--cardline),0 6px 20px rgba(0,0,0,.14);opacity:0;pointer-events:none;transition:opacity .2s}
+.frame-win body.bare #fspill{top:44px}
+.fs.frame-win body.bare #fspill{top:10px}
+body.bare.moving #fspill,body.bare #fspill:hover{opacity:1;pointer-events:auto}
+.fsb svg+svg,.fs .fsb svg:first-child{display:none}
+.fs .fsb svg+svg{display:block}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
 </style>
 </head>
@@ -112,6 +126,7 @@ main.tool-frame{cursor:crosshair}
   <div class="empty"><div class="big" id="emptyBig"></div><div id="emptySub"></div><div class="keys" id="emptyKeys"></div></div>
   <div class="zoom"><span id="zoomHint"></span><b id="zoomPct">100%</b></div>
 </main>
+<div id="fspill"><button class="ib" id="pillUi"></button><button class="ib fsb" id="pillFs"></button></div>
 <div id="menu"></div>
 <div id="tip"></div>
 <script src="lang/en.js"></script>

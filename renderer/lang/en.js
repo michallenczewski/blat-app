@@ -16,5 +16,7 @@ window.BLAT_EN = {
   'Przeciągnij obrazy z Gapy, Eksploratora albo przeglądarki, albo wklej je ze schowka.': 'Drag images from Gapa, Explorer or a web browser, or paste them from the clipboard.',
   'wklej': 'paste', 'notatka': 'note', 'ramka': 'frame', 'Spacja': 'Space', 'przesuwanie płótna': 'pan the canvas',
   'Panel boczny': 'Sidebar', 'Ułóż zaznaczone': 'Arrange selection', 'Zawsze na wierzchu': 'Always on top', 'Dwuklik zmienia nazwę': 'Double-click to rename',
+  'Pokaż interfejs': 'Show interface', 'Ukryj interfejs': 'Hide interface', 'Tab pokazuje interfejs': 'Tab shows the interface', 'Interfejs widoczny': 'Interface visible',
+  'Pełny ekran': 'Full screen', 'Wyjdź z pełnego ekranu': 'Exit full screen', 'spacja': 'Space',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
 };
