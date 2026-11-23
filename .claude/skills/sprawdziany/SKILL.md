@@ -15,4 +15,4 @@ Zgłoszony błąd najpierw staje się przypadkiem: dopisz krok i `ok(warunek, 'k
 
 ## Obecne przypadki
 
-dodanie obrazów i zapis plików, proporcje obrazu, ramka z nazwą, ramka przesuwa zawartość (także strzałkami), cofanie i ponawianie przesunięcia, notatka z tekstem, układanie do równej wysokości, zapis i ponowne wczytanie, usunięcie i cofnięcie usunięcia, tryb bez nawigacji (chowa pasek i listę, płótno na całą szerokość, powrót).
+dodanie obrazów i zapis plików, proporcje obrazu, ramka z nazwą, ramka przesuwa zawartość (także strzałkami), cofanie i ponawianie przesunięcia, notatka z tekstem, układanie do równej wysokości, zapis i ponowne wczytanie, usunięcie i cofnięcie usunięcia, tryb bez nawigacji (chowa pasek i listę, płótno na całą szerokość i do górnej krawędzi na Macu, powrót), ściąga skrótów (otwiera się, mieści w oknie, zamyka się).

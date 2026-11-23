@@ -17,6 +17,7 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | P | P | zawsze na wierzchu |
 | Tab | Tab | tryb bez nawigacji: samo płótno, bez paska i listy blatów |
 | ⌃⌘F | Ctrl+spacja | pełny ekran (Esc wychodzi) |
+| ? | ? | ściąga ze wszystkimi skrótami |
 
 ## Rozwój
 

@@ -22,6 +22,7 @@ const IC = {
   moon: svg('<path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/>'),
   ui: svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.2h12"/>'),
   fs: svg('<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>') + svg('<path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/>'),
+  keys: svg('<rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.01M6.7 6.5h.01M9.3 6.5h.01M12 6.5h.01M5 9.5h6"/>'),
   sun: svg('<circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.5M8 12.9v1.5M3.5 3.5l1 1M11.5 11.5l1 1M1.6 8h1.5M12.9 8h1.5M3.5 12.5l1-1M11.5 4.5l1-1"/>'),
 };
 
@@ -446,7 +447,8 @@ main.addEventListener('contextmenu', e => {
     [_t('Notatka'), () => addNote(p), 'T'],
     [_t('Wklej'), () => pasteFromClipboard(p), MOD + 'V'],
     [_t('Pokaż wszystko'), () => fit(), '0'],
-    '-', [_t(isBare() ? 'Pokaż interfejs' : 'Ukryj interfejs'), () => toggleBare(), 'Tab']
+    '-', [_t(isBare() ? 'Pokaż interfejs' : 'Ukryj interfejs'), () => toggleBare(), 'Tab'],
+    [_t('Skróty klawiszowe'), () => toggleKeys(true), '?']
   ]);
 });
 function reorder(d) {
@@ -512,6 +514,8 @@ function setTool(t) {
 addEventListener('keydown', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable)) return;
   const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey;
+  if (keysOpen()) { if (k === 'escape' || k === '?') { e.preventDefault(); toggleKeys(false); } return; }
+  if (k === '?') { e.preventDefault(); toggleKeys(true); return; }
   // pełny ekran: Ctrl+spacja na Windows (na Macu systemowe ⌃⌘F); Esc wychodzi, jeśli pełny ekran włączono stąd
   if (!isMac && e.ctrlKey && !e.shiftKey && !e.altKey && k === ' ' && !e.repeat && !spaceDown) { e.preventDefault(); fullscreenToggle(); return; }
   if (k === ' ' && !spaceDown) { spaceDown = true; main.classList.add('space'); e.preventDefault(); return; }
@@ -600,6 +604,27 @@ function pillTips() {
   $('#pillUi').title = _t('Pokaż interfejs') + ' (Tab)';
   $('#pillFs').title = isFs() ? _t('Wyjdź z pełnego ekranu') + ' (' + FSK + ' / Esc)' : _t('Pełny ekran') + ' (' + FSK + ')';
 }
+// ściąga skrótów (?), jak w Gapie; opisy zależą od systemu (Mac / Windows)
+const keysOpen = () => $('#keys').classList.contains('on');
+function renderKeys() {
+  const K = (k, t, c) => '<div class="k' + (c ? ' ' + c : '') + '"><i>' + k + '</i><small>' + t + '</small></div>';
+  const row = (m, ks) => '<div class="kr" style="margin-left:' + m + 'px">' + ks.join('') + '</div>';
+  const L = [
+    [MOD + 'V', _t('wklej obraz albo tekst')], [MOD + 'G', _t('ramka wokół zaznaczonych')],
+    [isMac ? '⌘Z  ⇧⌘Z' : 'Ctrl+Z  Ctrl+Y', _t('cofnij / ponów')], [MOD + 'N', _t('nowy blat')],
+    [MOD + 'A', _t('zaznacz wszystko')], [isMac ? '⌘ + ' + _t('kółko') : 'Ctrl + ' + _t('kółko'), _t('przybliżanie')],
+    [_t('strzałki'), _t('przesuń zaznaczone') + ' (⇧ ×10)'], [isMac ? '⌫' : 'Delete', _t('usuń zaznaczone')],
+    [(isMac ? '⌥' : 'Alt') + ' + ' + _t('przeciąganie'), _t('przesuwanie płótna')], [FSK, _t('pełny ekran')],
+  ];
+  $('#keys').innerHTML = '<div class="kc"><div class="kh"><b>' + _t('Skróty klawiszowe') + '</b><span>' + _t('? otwiera tę ściągę · Esc zamyka') + '</span></div>'
+    + row(0, [K('1', _t('100%')), K('0', _t('całość'))])
+    + row(20, [K('T', _t('notatka')), K('P', _t('zawsze na wierzchu'))])
+    + row(34, [K('A', _t('ułóż zaznaczone')), K('F', _t('ramka'))])
+    + row(54, [K('Z', _t('dopasuj zaznaczone')), K('V', _t('zaznaczanie') + '<em>Esc ' + _t('odznacz') + '</em>')])
+    + row(0, [K('Tab', _t('ukryj interfejs'), 'w'), K(_t('spacja'), _t('przytrzymaj i przeciągnij: przesuwanie płótna'), 'sp')])
+    + '<div class="km">' + L.map(([k, t]) => '<div><kbd>' + k + '</kbd>' + t + '</div>').join('') + '</div></div>';
+}
+function toggleKeys(v) { const o = $('#keys'); v = v == null ? !keysOpen() : v; if (v) renderKeys(); o.classList.toggle('on', v); if (v) try { localStorage.setItem('blatSeenKeys', '1'); } catch (e) {} }
 let onTop = false;
 function toggleTop(v) { onTop = v == null ? !onTop : v; $('#topBtn').classList.toggle('on', onTop); if (v == null) { api.setOnTop(onTop); tip(onTop ? _t('Blat zostaje na wierzchu') : _t('Blat zachowuje się jak zwykłe okno')); } }
 function emptyTexts() {
@@ -614,6 +639,8 @@ function initUi() {
   $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowy blat') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż zaznaczone') + ' (A)'; $('#arrangeBtn').onclick = arrange;
   $('#topBtn').innerHTML = IC.pin; $('#topBtn').title = _t('Zawsze na wierzchu') + ' (P)'; $('#topBtn').onclick = () => toggleTop();
+  $('#keysBtn').innerHTML = IC.keys; $('#keysBtn').title = _t('Skróty klawiszowe') + ' (?)'; $('#keysBtn').onclick = () => toggleKeys(true);
+  $('#keys').addEventListener('click', e => { if (!e.target.closest('.kc')) toggleKeys(false); });
   $('#themeBtn').onclick = () => { localStorage.setItem('blatTheme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); applyTheme(); };
   $('#bname').ondblclick = renameStart; $('#bname').title = _t('Dwuklik zmienia nazwę');
   $('#where').onclick = () => api.boardReveal();
@@ -660,6 +687,7 @@ window.blatTest = {
   move: (dx, dy) => { snapshot(); for (const o of [...movingSet()].map(byId)) { o.x += dx; o.y += dy; } drawAll(); changed(); },
   frame: name => { frameAround(selItems()); const f = selItems()[0]; const inp = f && els.get(f.id).querySelector('input'); if (inp) { if (name) inp.value = name; inp.blur(); } return f && f.id; },
   bare: v => { toggleBare(v); return isBare(); },
+  keys: v => { toggleKeys(v); return keysOpen(); },
   arrange, fit: () => fit(), zoom: f => zoomAt(f), undo: () => undo(false), redo: () => undo(true), remove: removeSel,
   save: () => { dirty = true; return saveNow(); }, open: openBoard, newBoard: async name => { await saveNow(); setBoard(await api.boardNew(name || 'Test')); return board.name; },
   // sprawdziany (umiejętność `sprawdziany`): każdy zgłoszony błąd dopisujemy tu jako przypadek; zwraca listę porażek
@@ -687,6 +715,8 @@ window.blatTest = {
     { const de = document.documentElement, was = [...de.classList].find(c => c.startsWith('frame-')); de.classList.replace(was, 'frame-mac');
       ok(Math.abs(main.getBoundingClientRect().top) < 1, 'na Macu w trybie bez nawigacji płótno sięga górnej krawędzi'); de.classList.replace('frame-mac', was); }
     this.bare(false); ok(getComputedStyle($('header')).display !== 'none' && Math.abs(main.getBoundingClientRect().width - mw) < 2, 'powrót interfejsu');
+    this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
+    this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();
     return fail;
   },
@@ -705,5 +735,6 @@ window.blatTest = {
   try { const u = await api.uiState(); toggleSide(u.side); toggleTop(u.onTop); } catch (e) {}
   const r = await refreshBoards();
   const name = r.last && r.boards.some(b => b.name === r.last) ? r.last : r.boards[0] && r.boards[0].name;
+  try { if (!api.web && !localStorage.getItem('blatSeenKeys')) setTimeout(() => toggleKeys(true), 1400); } catch (e) {}
   if (name) await openBoard(name); else setBoard(await api.boardNew(_t('Pierwszy blat')));
 })();

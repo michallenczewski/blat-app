@@ -18,5 +18,11 @@ window.BLAT_EN = {
   'Panel boczny': 'Sidebar', 'Ułóż zaznaczone': 'Arrange selection', 'Zawsze na wierzchu': 'Always on top', 'Dwuklik zmienia nazwę': 'Double-click to rename',
   'Pokaż interfejs': 'Show interface', 'Ukryj interfejs': 'Hide interface', 'Tab pokazuje interfejs': 'Tab shows the interface', 'Interfejs widoczny': 'Interface visible',
   'Pełny ekran': 'Full screen', 'Wyjdź z pełnego ekranu': 'Exit full screen', 'spacja': 'Space',
+  'Skróty klawiszowe': 'Keyboard shortcuts', '? otwiera tę ściągę · Esc zamyka': '? opens this sheet · Esc closes',
+  'wklej obraz albo tekst': 'paste image or text', 'ramka wokół zaznaczonych': 'frame around selection', 'cofnij / ponów': 'undo / redo',
+  'nowy blat': 'new board', 'zaznacz wszystko': 'select all', 'przybliżanie': 'zoom', 'strzałki': 'arrows', 'przesuń zaznaczone': 'move selection',
+  'usuń zaznaczone': 'delete selection', 'przeciąganie': 'drag', 'pełny ekran': 'full screen', '100%': '100%', 'całość': 'fit all',
+  'zawsze na wierzchu': 'always on top', 'ułóż zaznaczone': 'arrange selection', 'dopasuj zaznaczone': 'zoom to selection',
+  'zaznaczanie': 'select', 'odznacz': 'deselect', 'ukryj interfejs': 'hide interface', 'przytrzymaj i przeciągnij: przesuwanie płótna': 'hold and drag: pan the canvas',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
 };
