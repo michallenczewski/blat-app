@@ -143,7 +143,7 @@ let boardsCache = [];
 async function refreshBoards() {
   const r = await api.boardsList();
   boardsCache = r.boards;
-  $('#where').textContent = _t('Tablice w') + ': ' + r.dir.replace(/^.*[\\/](Documents|Dokumenty)[\\/]/, (m, d) => d + '/');
+  $('#where').textContent = _t('Blaty w') + ': ' + r.dir.replace(/^.*[\\/](Documents|Dokumenty)[\\/]/, (m, d) => d + '/');
   $('#where').title = r.dir;
   const ul = $('#boards'); ul.innerHTML = '';
   for (const b of r.boards) {
@@ -167,7 +167,7 @@ async function openBoard(name) {
   await saveNow();
   if (board) pruneImages(board);
   const b = await api.boardLoad(name);
-  if (!b) { tip(_t('Nie udało się otworzyć tablicy')); return; }
+  if (!b) { tip(_t('Nie udało się otworzyć blatu')); return; }
   setBoard(b);
 }
 function setBoard(b) {
@@ -179,7 +179,7 @@ function setBoard(b) {
   applyView(); drawAll(); refreshBoards();
   if (!board.items.length) { const r = main.getBoundingClientRect(); board.view = { x: r.width / 2, y: r.height / 2, z: 1 }; applyView(); }
 }
-async function newBoard() { await saveNow(); const b = await api.boardNew(_t('Nowa tablica')); setBoard(b); renameStart(); }
+async function newBoard() { await saveNow(); const b = await api.boardNew(_t('Nowy blat')); setBoard(b); renameStart(); }
 async function trashBoard(name) {
   if (board && board.name === name) { dirty = false; clearTimeout(saveT); }
   await api.boardTrash(name);
@@ -199,7 +199,7 @@ function renameStart() {
       await saveNow();
       const n = await api.boardRename(board.name, v);
       if (n) { board.name = n; b.textContent = n; document.title = n + ' — Blat'; dirty = true; saveNow(); drawAll(); }
-      else tip(_t('Tablica o tej nazwie już istnieje'));
+      else tip(_t('Blat o tej nazwie już istnieje'));
     }
   };
   inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
@@ -605,7 +605,7 @@ function initUi() {
   document.documentElement.classList.add(api.web ? 'frame-web' : isMac ? 'frame-mac' : 'frame-win');
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = _t(el.dataset.t);
   $('#sideBtn').innerHTML = IC.side; $('#sideBtn').title = _t('Panel boczny'); $('#sideBtn').onclick = () => toggleSide();
-  $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowa tablica') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
+  $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowy blat') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż zaznaczone') + ' (A)'; $('#arrangeBtn').onclick = arrange;
   $('#topBtn').innerHTML = IC.pin; $('#topBtn').title = _t('Zawsze na wierzchu') + ' (P)'; $('#topBtn').onclick = () => toggleTop();
   $('#themeBtn').onclick = () => { localStorage.setItem('blatTheme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); applyTheme(); };
@@ -676,7 +676,7 @@ window.blatTest = {
     ok(back && back.items.length === board.items.length, 'zapis i ponowne wczytanie');
     this.select([n]); this.remove(); ok(!byId(n), 'usunięcie'); this.undo(); ok(!!byId(n), 'cofnięcie usunięcia');
     const mw = main.getBoundingClientRect().width; this.bare(true);
-    ok(getComputedStyle($('header')).display === 'none' && getComputedStyle($('aside')).display === 'none', 'tryb bez nawigacji chowa pasek i listę tablic');
+    ok(getComputedStyle($('header')).display === 'none' && getComputedStyle($('aside')).display === 'none', 'tryb bez nawigacji chowa pasek i listę blatów');
     ok(main.getBoundingClientRect().width > mw && Math.abs(main.getBoundingClientRect().width - innerWidth) < 2, 'płótno w trybie bez nawigacji zajmuje całą szerokość');
     this.bare(false); ok(getComputedStyle($('header')).display !== 'none' && Math.abs(main.getBoundingClientRect().width - mw) < 2, 'powrót interfejsu');
     await api.boardTrash(name); await refreshBoards();
@@ -697,5 +697,5 @@ window.blatTest = {
   try { const u = await api.uiState(); toggleSide(u.side); toggleTop(u.onTop); } catch (e) {}
   const r = await refreshBoards();
   const name = r.last && r.boards.some(b => b.name === r.last) ? r.last : r.boards[0] && r.boards[0].name;
-  if (name) await openBoard(name); else setBoard(await api.boardNew(_t('Pierwsza tablica')));
+  if (name) await openBoard(name); else setBoard(await api.boardNew(_t('Pierwszy blat')));
 })();

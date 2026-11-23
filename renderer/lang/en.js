@@ -1,11 +1,11 @@
 // Słownik angielski: klucz = napis polski z _t(...). Sprawdza go scripts/tlumaczenia.mjs.
 window.BLAT_EN = {
-  'Tablice': 'Boards', 'Tablice w': 'Boards in', 'Nowa tablica': 'New board', 'Pierwsza tablica': 'First board',
+  'Blaty': 'Boards', 'Blaty w': 'Boards in', 'Nowy blat': 'New board', 'Pierwszy blat': 'First board',
   'Tryb jasny': 'Light mode', 'Tryb ciemny': 'Dark mode', 'Notatka': 'Note', 'Ramka': 'Frame', 'Zaznaczanie': 'Select',
   'element': 'item', 'elementy': 'items', 'elementów': 'items',
   'zapisuję…': 'saving…', 'zapisane': 'saved', 'nie udało się zapisać': 'could not save',
   'Zmień nazwę…': 'Rename…', 'Pokaż w Finderze': 'Show in Finder', 'Pokaż w Eksploratorze': 'Show in Explorer', 'Przenieś do kosza': 'Move to Trash',
-  'Nie udało się otworzyć tablicy': 'Could not open the board', 'Tablica o tej nazwie już istnieje': 'A board with this name already exists',
+  'Nie udało się otworzyć blatu': 'Could not open the board', 'Blat o tej nazwie już istnieje': 'A board with this name already exists',
   'Dodaję obrazy…': 'Adding images…', 'Dodaję obraz…': 'Adding image…', 'Tego formatu Blat jeszcze nie czyta': 'Blat cannot read this format yet',
   'Dodane obrazy': 'Images added', 'Dodany obraz': 'Image added', 'Zaznacz co najmniej dwa obrazy': 'Select at least two images',
   'Ułóż': 'Arrange', 'Ramka wokół zaznaczonych': 'Frame around selection', 'Na wierzch': 'Bring to front', 'Na spód': 'Send to back',

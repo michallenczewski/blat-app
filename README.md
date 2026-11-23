@@ -1,8 +1,8 @@
 # Blat
 
-Lekka tablica na referencje i szkice koncepcji, na Windows i Maca. Siostra [Gapy](https://github.com/michallenczewski/gapa).
+Lekki blat na referencje i szkice koncepcji, na Windows i Maca. Siostra [Gapy](https://github.com/michallenczewski/gapa).
 
-Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopisz notatkę, zbierz grupę w ramkę i ułóż ją jednym klawiszem. Tablice zapisują się same w `Dokumenty/Blat`.
+Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopisz notatkę, zbierz grupę w ramkę i ułóż ją jednym klawiszem. Blaty zapisują się same w `Dokumenty/Blat`.
 
 ## Skróty
 
@@ -15,7 +15,7 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | spacja albo ⌥ + przeciąganie | spacja albo Alt + przeciąganie | przesuwanie widoku |
 | ⌘ + kółko | Ctrl + kółko | przybliżanie |
 | P | P | zawsze na wierzchu |
-| Tab | Tab | tryb bez nawigacji: samo płótno, bez paska i listy tablic |
+| Tab | Tab | tryb bez nawigacji: samo płótno, bez paska i listy blatów |
 | ⌃⌘F | Ctrl+spacja | pełny ekran (Esc wychodzi) |
 
 ## Rozwój

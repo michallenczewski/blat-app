@@ -24,7 +24,7 @@ function saveSettings() { try { fs.mkdirSync(path.dirname(settingsFile()), { rec
 const boardsDir = () => settings.dir || path.join(app.getPath('documents'), 'Blat');
 const boardPath = name => path.join(boardsDir(), safeName(name) + '.blat');
 // nazwa tablicy = nazwa folderu: bez znaków, których system nie przyjmie
-const safeName = n => String(n || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Tablica';
+const safeName = n => String(n || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Blat';
 
 /* ---------- tablice ---------- */
 async function writeAtomic(file, data) {
@@ -57,8 +57,8 @@ ipcMain.handle('board-load', async (e, name) => {
 });
 ipcMain.handle('board-new', async (e, base) => {
   await fsp.mkdir(boardsDir(), { recursive: true });
-  let name = safeName(base || 'Nowa tablica'), n = 2;
-  while (fs.existsSync(boardPath(name))) name = safeName(base || 'Nowa tablica') + ' ' + n++;
+  let name = safeName(base || 'Nowy blat'), n = 2;
+  while (fs.existsSync(boardPath(name))) name = safeName(base || 'Nowy blat') + ' ' + n++;
   await fsp.mkdir(path.join(boardPath(name), 'img'), { recursive: true });
   const board = { v: 1, name, items: [], view: { x: 0, y: 0, z: 1 }, modified: Date.now() };
   await writeAtomic(path.join(boardPath(name), 'board.json'), JSON.stringify(board));
