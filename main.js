@@ -113,8 +113,10 @@ ipcMain.on('chrome-colors', (e, bg, fg, h) => {
   const w = BrowserWindow.fromWebContents(e.sender);
   if (isWin && w) try { w.setTitleBarOverlay({ color: bg, symbolColor: fg, height: h || 52 }); } catch (err) {}
 });
-// tryb bez nawigacji: na Macu przyciski okna schodzą na węższy pasek (40 px zamiast 52 px)
+// tryb bez nawigacji: na Macu przyciski okna przesuwają się bliżej rogu, nad płótno
 ipcMain.on('bare', (e, v) => { const w = BrowserWindow.fromWebContents(e.sender); if (isMac && w && w.setWindowButtonPosition) try { w.setWindowButtonPosition(v ? { x: 14, y: 13 } : { x: 18, y: 19 }); } catch (err) {} });
+// na Macu w trybie bez nawigacji przyciski okna pokazują się tylko przy ruchu myszy, razem z pastylką
+ipcMain.on('window-buttons', (e, v) => { const w = BrowserWindow.fromWebContents(e.sender); if (isMac && w && w.setWindowButtonVisibility) try { w.setWindowButtonVisibility(!!v); } catch (err) {} });
 // pełny ekran 100% (bez paska zadań i paska okna): Ctrl+spacja na Windows, ⌃⌘F na Macu — jak w Gapie
 ipcMain.on('fullscreen-toggle', e => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.setFullScreen(!w.isFullScreen()); });
 

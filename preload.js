@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
   uiState: () => ipcRenderer.invoke('ui-state'),
   chromeColors: (bg, fg, h) => ipcRenderer.send('chrome-colors', bg, fg, h),
   setBare: v => ipcRenderer.send('bare', v),
+  windowButtons: v => ipcRenderer.send('window-buttons', v),
   fullscreenToggle: () => ipcRenderer.send('fullscreen-toggle'),
   onFullscreen: cb => ipcRenderer.on('fullscreen', (e, v) => cb(v)),
   updateGet: () => ipcRenderer.invoke('update-get'),

@@ -574,7 +574,7 @@ function toggleBare(v) {
   const r1 = main.getBoundingClientRect();
   if (board) { board.view.x += r0.left - r1.left; board.view.y += r0.top - r1.top; applyView(); }
   if (api.setBare) api.setBare(isBare());
-  applyTheme(); pillTips();
+  syncButtons(); applyTheme(); pillTips();
   if (v == null) tip(isBare() ? _t('Tab pokazuje interfejs') : _t('Interfejs widoczny'));
 }
 let fsBare = null;
@@ -587,7 +587,13 @@ function onFullscreen(v) {
   document.documentElement.classList.toggle('fs', v);
   if (v && fsBare === null) { fsBare = isBare(); if (!fsBare) toggleBare(true); }
   else if (!v && fsBare !== null) { if (!fsBare) toggleBare(false); fsBare = null; }
-  applyTheme(); pillTips();
+  syncButtons(); applyTheme(); pillTips();
+}
+// przyciski okna na Macu: ukryte w trybie bez nawigacji (poza pełnym ekranem), dopóki mysz stoi
+let btnShown = true;
+function syncButtons() {
+  const v = !isMac || !isBare() || isFs() || document.body.classList.contains('moving');
+  if (v !== btnShown && api.windowButtons) { btnShown = v; api.windowButtons(v); }
 }
 const FSK = isMac ? '⌃⌘F' : 'Ctrl+' + _t('spacja');
 function pillTips() {
@@ -619,7 +625,7 @@ function initUi() {
   $('#pillUi').innerHTML = IC.ui; $('#pillUi').onclick = e => { e.stopPropagation(); toggleBare(false); };
   $('#pillFs').innerHTML = IC.fs; $('#pillFs').onclick = e => { e.stopPropagation(); fullscreenToggle(); };
   let idleT = 0;
-  addEventListener('mousemove', () => { document.body.classList.add('moving'); clearTimeout(idleT); idleT = setTimeout(() => document.body.classList.remove('moving'), 2000); }, { passive: true });
+  addEventListener('mousemove', () => { document.body.classList.add('moving'); syncButtons(); clearTimeout(idleT); idleT = setTimeout(() => { document.body.classList.remove('moving'); syncButtons(); }, 2000); }, { passive: true });
   if (api.onFullscreen) api.onFullscreen(onFullscreen); else document.addEventListener('fullscreenchange', () => onFullscreen(!!document.fullscreenElement));
   setTool('select'); emptyTexts(); applyTheme(); pillTips();
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
@@ -678,6 +684,8 @@ window.blatTest = {
     const mw = main.getBoundingClientRect().width; this.bare(true);
     ok(getComputedStyle($('header')).display === 'none' && getComputedStyle($('aside')).display === 'none', 'tryb bez nawigacji chowa pasek i listę blatów');
     ok(main.getBoundingClientRect().width > mw && Math.abs(main.getBoundingClientRect().width - innerWidth) < 2, 'płótno w trybie bez nawigacji zajmuje całą szerokość');
+    { const de = document.documentElement, was = [...de.classList].find(c => c.startsWith('frame-')); de.classList.replace(was, 'frame-mac');
+      ok(Math.abs(main.getBoundingClientRect().top) < 1, 'na Macu w trybie bez nawigacji płótno sięga górnej krawędzi'); de.classList.replace('frame-mac', was); }
     this.bare(false); ok(getComputedStyle($('header')).display !== 'none' && Math.abs(main.getBoundingClientRect().width - mw) < 2, 'powrót interfejsu');
     await api.boardTrash(name); await refreshBoards();
     return fail;

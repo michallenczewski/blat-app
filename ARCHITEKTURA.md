@@ -13,7 +13,7 @@
 
 ## Tryb bez nawigacji i pełny ekran
 
-Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tablic. Zostaje wąski pasek na przyciski okna (40 px na Macu, 36 px na Windows). Pełny ekran (⌃⌘F, Ctrl+spacja) włączony z programu od razu chowa interfejs, a po wyjściu przywraca poprzedni stan. Pastylka w prawym górnym rogu pojawia się przy ruchu myszy. Widok przesuwamy o różnicę położenia płótna, żeby obrazy nie przeskakiwały.
+Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tablic. Na Macu płótno sięga samej góry okna: przyciski okna pokazują się nad nim tylko przy ruchu myszy (`setWindowButtonVisibility`), a okno przesuwa się za niewidoczny pas 28 px przy górnej krawędzi. Na Windows zostaje pasek 36 px na systemowe przyciski okna. Pełny ekran (⌃⌘F, Ctrl+spacja) włączony z programu od razu chowa interfejs, a po wyjściu przywraca poprzedni stan. Pastylka w prawym górnym rogu pojawia się przy ruchu myszy. Widok przesuwamy o różnicę położenia płótna, żeby obrazy nie przeskakiwały.
 
 ## Ikona
 

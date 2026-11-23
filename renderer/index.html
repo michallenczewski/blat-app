@@ -89,10 +89,12 @@ main.tool-frame{cursor:crosshair}
 #tip.on{opacity:.92}
 /* tryb bez nawigacji (Tab, jak w Gapie): samo płótno; wąski pasek u góry zostaje na przyciski okna i przesuwanie okna */
 body.bare{grid-template-columns:minmax(0,1fr);grid-template-rows:0 minmax(0,1fr)}
-.frame-mac body.bare{grid-template-rows:40px minmax(0,1fr)}
 .frame-win body.bare{grid-template-rows:36px minmax(0,1fr)}
 .fs body.bare{grid-template-rows:0 minmax(0,1fr)}
 body.bare::before{content:"";grid-row:1;grid-column:1;-webkit-app-region:drag}
+/* na Macu bez paska: płótno do samej góry, niewidoczny pas do przesuwania okna, przyciski okna tylko przy ruchu myszy */
+.frame-mac body.bare::before{position:fixed;left:0;right:0;top:0;height:28px;z-index:20}
+.fs.frame-mac body.bare::before{display:none}
 body.bare header,body.bare aside{display:none}
 body.bare main{grid-row:2;grid-column:1;border-radius:0;box-shadow:none}
 #fspill{-webkit-app-region:no-drag;position:fixed;top:10px;right:12px;z-index:60;display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--card);box-shadow:0 0 0 1px var(--cardline),0 6px 20px rgba(0,0,0,.14);opacity:0;pointer-events:none;transition:opacity .2s}
