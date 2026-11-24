@@ -17,7 +17,7 @@ Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tab
 
 ## Ikona
 
-Źródło to `projekt/logo/blat.svg` (wypchnięta kratka na #FF6B1A, wspólna rodzina z Gapą i Modo). `build/icon.png` (1024 px, kwadrat 824 px według siatki Apple), `build/icon-win.png` (256 px) i `renderer/favicon.png` (64 px) renderujemy z niego przez `rsvg-convert`.
+Źródło to `projekt/logo/blat.svg` (wypchnięta kratka na #FF6B1A, wspólna rodzina z Gapą i Modo). `build/icon.png` (1024 px, kwadrat 824 px według siatki Apple), `build/icon-win.png` (1024 px, bez marginesu, tak jak w Gapie — inaczej w menu Start ikona wychodzi mniejsza od ikon Gapy i Modo) i `renderer/favicon.png` (64 px) renderujemy z niego przez `rsvg-convert`.
 
 ## Format tablicy
 
