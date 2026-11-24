@@ -13,7 +13,10 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | A | A | ułóż zaznaczone (albo zawartość ramki) |
 | 0, 1, Z | 0, 1, Z | całość, 100%, dopasuj zaznaczone |
 | spacja albo ⌥ + przeciąganie | spacja albo Alt + przeciąganie | przesuwanie widoku |
-| ⌘ + kółko | Ctrl + kółko | przybliżanie |
+| kółko myszy | kółko myszy | przybliżanie (w ustawieniach można zmienić na przesuwanie) |
+| gładzik dwoma palcami | gładzik dwoma palcami | przesuwanie płótna |
+| wciśnięte kółko | wciśnięte kółko | przesuwanie płótna |
+| ⌘ + kółko, szczypanie | Ctrl + kółko, szczypanie | przybliżanie |
 | P | P | zawsze na wierzchu |
 | Tab | Tab | tryb bez nawigacji: samo płótno, bez paska i listy blatów |
 | ⌃⌘F | Ctrl+spacja | pełny ekran (Esc wychodzi) |

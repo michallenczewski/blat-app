@@ -22,6 +22,7 @@ const IC = {
   moon: svg('<path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/>'),
   ui: svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.2h12"/>'),
   fs: svg('<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>') + svg('<path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/>'),
+  set: svg('<path d="M2.5 5.5h11M2.5 10.5h11"/><circle cx="6" cy="5.5" r="1.8" fill="var(--bg)"/><circle cx="10.5" cy="10.5" r="1.8" fill="var(--bg)"/>'),
   keys: svg('<rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.01M6.7 6.5h.01M9.3 6.5h.01M12 6.5h.01M5 9.5h6"/>'),
   sun: svg('<circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.5M8 12.9v1.5M3.5 3.5l1 1M11.5 11.5l1 1M1.6 8h1.5M12.9 8h1.5M3.5 12.5l1-1M11.5 4.5l1-1"/>'),
 };
@@ -426,11 +427,33 @@ main.addEventListener('dblclick', e => {
   if (it.type === 'frame' && e.target.closest('.fl')) renameFrame(it);
   if (it.type === 'image') fit([it]);
 });
-// kółko: przesuwanie; Ctrl/⌘ + kółko albo szczypanie na gładziku: przybliżanie wokół kursora
+// kółko myszy: przybliżanie wokół kursora (albo przesuwanie — w ustawieniach); gładzik dwoma palcami: przesuwanie;
+// Ctrl/⌘ + kółko albo szczypanie na gładziku: zawsze przybliżanie; Shift + kółko: przesuwanie w poziomie;
+// wciśnięte kółko (środkowy przycisk), spacja albo Alt + przeciąganie: przesuwanie
+// Mysz czy gładzik: ząbek kółka daje wheelDeltaY w wielokrotnościach 120 (także przy powiększeniu ekranu w Windows),
+// a gładzik w Chromium ma wheelDeltaY = −3 × deltaY albo wartości ułamkowe i ruch w poziomie.
+function wheelKind(e, pure) {
+  let k;
+  if (e.deltaMode === 1 || e.deltaMode === 2) k = 'mouse';
+  else if (e.deltaX) k = 'pad';
+  else { const w = e.wheelDeltaY; k = w && w % 120 === 0 && w !== -3 * e.deltaY ? 'mouse' : 'pad'; }
+  if (pure) return k;
+  // jeden gest = jedno rozpoznanie (bezwładność gładzika potrafi wyglądać jak kółko)
+  const now = performance.now(); if (now - wheelKind.t < 220) k = wheelKind.k; wheelKind.t = now; wheelKind.k = k; return k;
+}
+wheelKind.t = 0; wheelKind.k = 'pad';
+let wheelMode = 'zoom'; try { if (localStorage.getItem('blatWheel') === 'pan') wheelMode = 'pan'; } catch (e) {}
+function setWheelMode(m) { wheelMode = m; try { localStorage.setItem('blatWheel', m); } catch (e) {} wheelTexts(); tip(m === 'zoom' ? _t('Kółko myszy przybliża') : _t('Kółko myszy przesuwa')); }
 main.addEventListener('wheel', e => {
   e.preventDefault();
-  if (e.ctrlKey || e.metaKey) { const d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; zoomAt(Math.exp(-Math.max(-120, Math.min(120, d)) / (Math.abs(d) < 40 ? 120 : 400)), e.clientX, e.clientY); }
-  else { board.view.x -= e.shiftKey ? e.deltaY : e.deltaX; board.view.y -= e.shiftKey ? 0 : e.deltaY; applyView(); changedView(); }
+  if (e.ctrlKey || e.metaKey) { const d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; zoomAt(Math.exp(-Math.max(-120, Math.min(120, d)) / (Math.abs(d) < 40 ? 120 : 400)), e.clientX, e.clientY); return; }
+  if (!e.shiftKey && wheelMode === 'zoom' && wheelKind(e) === 'mouse') {
+    // jeden ząbek ≈ 15%; kierunek zawsze z deltaY, liczba ząbków z wheelDeltaY (gdy to wielokrotność 120)
+    const w = Math.abs(e.wheelDeltaY || 0), steps = w && w % 120 === 0 ? w / 120 : Math.max(1, Math.abs(e.deltaMode === 1 ? e.deltaY / 3 : e.deltaY / 100));
+    const n = -Math.sign(e.deltaY) * steps;
+    zoomAt(Math.pow(1.15, Math.max(-3, Math.min(3, n))), e.clientX, e.clientY); return;
+  }
+  board.view.x -= e.shiftKey ? (e.deltaY || e.deltaX) : e.deltaX; board.view.y -= e.shiftKey ? 0 : e.deltaY; applyView(); changedView();
 }, { passive: false });
 main.addEventListener('contextmenu', e => {
   e.preventDefault();
@@ -612,9 +635,9 @@ function renderKeys() {
   const L = [
     [MOD + 'V', _t('wklej obraz albo tekst')], [MOD + 'G', _t('ramka wokół zaznaczonych')],
     [isMac ? '⌘Z  ⇧⌘Z' : 'Ctrl+Z  Ctrl+Y', _t('cofnij / ponów')], [MOD + 'N', _t('nowy blat')],
-    [MOD + 'A', _t('zaznacz wszystko')], [isMac ? '⌘ + ' + _t('kółko') : 'Ctrl + ' + _t('kółko'), _t('przybliżanie')],
+    [MOD + 'A', _t('zaznacz wszystko')], [wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'), _t('przybliżanie')],
     [_t('strzałki'), _t('przesuń zaznaczone') + ' (⇧ ×10)'], [isMac ? '⌫' : 'Delete', _t('usuń zaznaczone')],
-    [(isMac ? '⌥' : 'Alt') + ' + ' + _t('przeciąganie'), _t('przesuwanie płótna')], [FSK, _t('pełny ekran')],
+    [_t('wciśnięte kółko') + ' / ' + (isMac ? '⌥' : 'Alt') + ' + ' + _t('przeciąganie'), _t('przesuwanie płótna')], [FSK, _t('pełny ekran')],
   ];
   $('#keys').innerHTML = '<div class="kc"><div class="kh"><b>' + _t('Skróty klawiszowe') + '</b><span>' + _t('? otwiera tę ściągę · Esc zamyka') + '</span></div>'
     + row(0, [K('1', _t('100%')), K('0', _t('całość'))])
@@ -625,6 +648,15 @@ function renderKeys() {
     + '<div class="km">' + L.map(([k, t]) => '<div><kbd>' + k + '</kbd>' + t + '</div>').join('') + '</div></div>';
 }
 function toggleKeys(v) { const o = $('#keys'); v = v == null ? !keysOpen() : v; if (v) renderKeys(); o.classList.toggle('on', v); if (v) try { localStorage.setItem('blatSeenKeys', '1'); } catch (e) {} }
+function wheelTexts() { $('#zoomHint').textContent = wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'); if (keysOpen()) renderKeys(); }
+// ustawienia: na razie tylko zachowanie kółka myszy
+function showSettings() {
+  const r = $('#setBtn').getBoundingClientRect();
+  showMenu(r.left, r.top - 90, [
+    [_t('Kółko myszy przybliża'), () => setWheelMode('zoom'), wheelMode === 'zoom' ? '✓' : ''],
+    [_t('Kółko myszy przesuwa'), () => setWheelMode('pan'), wheelMode === 'pan' ? '✓' : '']
+  ]);
+}
 let onTop = false;
 function toggleTop(v) { onTop = v == null ? !onTop : v; $('#topBtn').classList.toggle('on', onTop); if (v == null) { api.setOnTop(onTop); tip(onTop ? _t('Blat zostaje na wierzchu') : _t('Blat zachowuje się jak zwykłe okno')); } }
 function emptyTexts() {
@@ -639,12 +671,13 @@ function initUi() {
   $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowy blat') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż zaznaczone') + ' (A)'; $('#arrangeBtn').onclick = arrange;
   $('#topBtn').innerHTML = IC.pin; $('#topBtn').title = _t('Zawsze na wierzchu') + ' (P)'; $('#topBtn').onclick = () => toggleTop();
+  $('#setBtn').innerHTML = IC.set; $('#setBtn').title = _t('Ustawienia'); $('#setBtn').onclick = e => { e.stopPropagation(); showSettings(); };
   $('#keysBtn').innerHTML = IC.keys; $('#keysBtn').title = _t('Skróty klawiszowe') + ' (?)'; $('#keysBtn').onclick = () => toggleKeys(true);
   $('#keys').addEventListener('click', e => { if (!e.target.closest('.kc')) toggleKeys(false); });
   $('#themeBtn').onclick = () => { localStorage.setItem('blatTheme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); applyTheme(); };
   $('#bname').ondblclick = renameStart; $('#bname').title = _t('Dwuklik zmienia nazwę');
   $('#where').onclick = () => api.boardReveal();
-  $('#zoomHint').textContent = MOD + _t('kółko');
+  wheelTexts();
   const tools = [['select', IC.select, 'Zaznaczanie', 'V'], ['note', IC.note, 'Notatka', 'T'], ['frame', IC.frame, 'Ramka', 'F']];
   $('#tools').innerHTML = tools.map(([t, ic, n, k]) => '<button class="ib" data-tool="' + t + '" title="' + _t(n) + ' (' + k + ')">' + ic + '</button>').join('');
   for (const b of document.querySelectorAll('#tools .ib')) b.onclick = () => setTool(b.dataset.tool);
@@ -688,6 +721,7 @@ window.blatTest = {
   frame: name => { frameAround(selItems()); const f = selItems()[0]; const inp = f && els.get(f.id).querySelector('input'); if (inp) { if (name) inp.value = name; inp.blur(); } return f && f.id; },
   bare: v => { toggleBare(v); return isBare(); },
   keys: v => { toggleKeys(v); return keysOpen(); },
+  wheelMode: m => { if (m) setWheelMode(m); return wheelMode; },
   arrange, fit: () => fit(), zoom: f => zoomAt(f), undo: () => undo(false), redo: () => undo(true), remove: removeSel,
   save: () => { dirty = true; return saveNow(); }, open: openBoard, newBoard: async name => { await saveNow(); setBoard(await api.boardNew(name || 'Test')); return board.name; },
   // sprawdziany (umiejętność `sprawdziany`): każdy zgłoszony błąd dopisujemy tu jako przypadek; zwraca listę porażek
@@ -721,6 +755,14 @@ window.blatTest = {
         const hidden = cs.opacity === '0' || cs.pointerEvents === 'none' || cs.visibility === 'hidden'; if (!hidden || cs.display === 'none') return false;
         const r = el.getBoundingClientRect(); return r.width && r.height && r.left < hr.right && r.right > hr.left && r.top < hr.bottom && r.bottom > hr.top; });
       ok(!bad.length, 'pasek okna nie jest zasłonięty niewidoczną warstwą (' + bad.map(e => e.id || e.className).join(', ') + ')'); }
+    // kółko myszy przybliża, gładzik przesuwa (zgłoszenie Michała 24.11.2026)
+    { const K = (dy, wdy, dx = 0, mode = 0) => typeof wheelKind === 'function' ? wheelKind({ deltaY: dy, wheelDeltaY: wdy, deltaX: dx, deltaMode: mode }, true) : 'pad';
+      ok(K(4, -120) === 'mouse', 'kółko myszy na Macu rozpoznane jako mysz');
+      ok(K(100, -120) === 'mouse' && K(125, -120) === 'mouse' && K(-240, 240) === 'mouse', 'kółko myszy na Windows (także przy powiększeniu ekranu) rozpoznane jako mysz');
+      ok(K(3, 0, 0, 1) === 'mouse', 'kółko w trybie linii rozpoznane jako mysz');
+      ok(K(-2.5, 7.5) === 'pad' && K(40, -120) === 'pad' && K(10, -120, 3) === 'pad', 'gładzik rozpoznany jako gładzik');
+      const z0 = board.view.z; main.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, deltaMode: 1, clientX: 300, clientY: 300, cancelable: true }));
+      ok(board.view.z > z0, 'kółko myszy przybliża płótno'); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();
