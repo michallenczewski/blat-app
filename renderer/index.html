@@ -124,6 +124,13 @@ body.bare #fspill{-webkit-app-region:no-drag}
 @media (max-width:620px){body:not(.bare){grid-template-columns:0 minmax(0,1fr)}aside{visibility:hidden}#sideBtn,.title .p,.title .s,.sep{display:none}.title{margin-left:4px}}
 @media (max-width:420px){.title .saved,#zoomHint{display:none}}
 @media (max-height:300px){.zoom{bottom:8px;right:10px}}
+/* przypięcie na wierzchu: kolor z logo, żeby było widać od razu */
+.ib.pinned,.ib.pinned:hover{background:#FF6B1A;color:#fff}
+#pinMark{display:none;position:fixed;top:12px;right:14px;z-index:55;width:22px;height:22px;border-radius:6px;background:#FF6B1A;color:#fff;align-items:center;justify-content:center;pointer-events:none}
+#pinMark svg{width:14px;height:14px}
+.frame-win body.bare #pinMark{top:46px}
+body.bare.ontop #pinMark{display:flex}
+body.bare.ontop.moving #pinMark{display:none}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
 </style>
 </head>
@@ -149,7 +156,8 @@ body.bare #fspill{-webkit-app-region:no-drag}
   <div class="empty"><div class="big" id="emptyBig"></div><div id="emptySub"></div><div class="keys" id="emptyKeys"></div></div>
   <div class="zoom"><span id="zoomHint"></span><b id="zoomPct">100%</b></div>
 </main>
-<div id="fspill"><button class="ib" id="pillUi"></button><button class="ib fsb" id="pillFs"></button></div>
+<div id="pinMark"></div>
+<div id="fspill"><button class="ib" id="pillTop"></button><button class="ib" id="pillUi"></button><button class="ib fsb" id="pillFs"></button></div>
 <div id="keys" role="dialog"></div>
 <div id="menu"></div>
 <div id="tip"></div>

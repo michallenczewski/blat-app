@@ -18,6 +18,8 @@ const IC = {
   frame: svg('<rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M5 6.5h3"/>'),
   arrange: svg('<rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="8.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="2.5" y="8.5" width="5" height="5" rx="1"/><rect x="8.5" y="7" width="5" height="6.5" rx="1"/>'),
   pin: svg('<path d="M6 2.5h4M8 2.5v5M5 7.5h6l-1 3H6zM8 10.5v3"/>'),
+  // przypięta: pełna główka pinezki
+  pinOn: svg('<path d="M6 2.5h4v5H6zM5 7.5h6l-1 3H6z" fill="currentColor"/><path d="M8 10.5v3"/>'),
   plus: svg('<path d="M8 3v10M3 8h10"/>', 13),
   moon: svg('<path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/>'),
   ui: svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.2h12"/>'),
@@ -658,7 +660,12 @@ function showSettings() {
   ]);
 }
 let onTop = false;
-function toggleTop(v) { onTop = v == null ? !onTop : v; $('#topBtn').classList.toggle('on', onTop); if (v == null) { api.setOnTop(onTop); tip(onTop ? _t('Blat zostaje na wierzchu') : _t('Blat zachowuje się jak zwykłe okno')); } }
+// przypięcie na wierzchu: pomarańczowy przycisk z pełną pinezką; w trybie bez nawigacji mała pinezka w rogu
+function toggleTop(v) {
+  onTop = v == null ? !onTop : v;
+  for (const b of [$('#topBtn'), $('#pillTop')]) { if (!b) continue; b.classList.toggle('pinned', onTop); b.innerHTML = onTop ? IC.pinOn : IC.pin; b.title = (onTop ? _t('Przypięty na wierzchu') : _t('Zawsze na wierzchu')) + ' (P)'; }
+  document.body.classList.toggle('ontop', onTop);
+  if (v == null) { api.setOnTop(onTop); tip(onTop ? _t('Blat zostaje na wierzchu') : _t('Blat zachowuje się jak zwykłe okno')); } }
 function emptyTexts() {
   $('#emptyBig').textContent = _t('Puste płótno');
   $('#emptySub').textContent = _t('Przeciągnij obrazy z Gapy, Eksploratora albo przeglądarki, albo wklej je ze schowka.').replace('Eksploratora', isMac ? 'Findera' : 'Eksploratora').replace('Explorer', isMac ? 'Finder' : 'Explorer');
@@ -670,7 +677,7 @@ function initUi() {
   $('#sideBtn').innerHTML = IC.side; $('#sideBtn').title = _t('Panel boczny'); $('#sideBtn').onclick = () => toggleSide();
   $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowy blat') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż zaznaczone') + ' (A)'; $('#arrangeBtn').onclick = arrange;
-  $('#topBtn').innerHTML = IC.pin; $('#topBtn').title = _t('Zawsze na wierzchu') + ' (P)'; $('#topBtn').onclick = () => toggleTop();
+  $('#topBtn').onclick = () => toggleTop(); $('#pillTop').onclick = e => { e.stopPropagation(); toggleTop(); }; $('#pinMark').innerHTML = IC.pinOn; toggleTop(onTop);
   $('#setBtn').innerHTML = IC.set; $('#setBtn').title = _t('Ustawienia'); $('#setBtn').onclick = e => { e.stopPropagation(); showSettings(); };
   $('#keysBtn').innerHTML = IC.keys; $('#keysBtn').title = _t('Skróty klawiszowe') + ' (?)'; $('#keysBtn').onclick = () => toggleKeys(true);
   $('#keys').addEventListener('click', e => { if (!e.target.closest('.kc')) toggleKeys(false); });
@@ -763,6 +770,12 @@ window.blatTest = {
       ok(K(-2.5, 7.5) === 'pad' && K(40, -120) === 'pad' && K(10, -120, 3) === 'pad', 'gładzik rozpoznany jako gładzik');
       const z0 = board.view.z; main.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, deltaMode: 1, clientX: 300, clientY: 300, cancelable: true }));
       ok(board.view.z > z0, 'kółko myszy przybliża płótno'); }
+    // przypięcie na wierzchu ma być wyraźnie widać (zgłoszenie Michała 24.11.2026)
+    { const was = onTop, bg = () => getComputedStyle($('#topBtn')).backgroundColor;
+      toggleTop(true); const on = bg(); toggleTop(false); const off = bg();
+      ok(on === 'rgb(255, 107, 26)' && off !== on, 'przypięty przycisk pinezki jest pomarańczowy, odpięty nie');
+      toggleBare(true); toggleTop(true); const pm = $('#pinMark'); ok(pm && getComputedStyle(pm).display !== 'none', 'w trybie bez nawigacji przypięcie widać w rogu');
+      toggleTop(false); ok(!pm || getComputedStyle(pm).display === 'none', 'po odpięciu znak w rogu znika'); toggleBare(false); toggleTop(was); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();

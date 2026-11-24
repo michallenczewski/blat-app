@@ -25,5 +25,6 @@ window.BLAT_EN = {
   'zawsze na wierzchu': 'always on top', 'ułóż zaznaczone': 'arrange selection', 'dopasuj zaznaczone': 'zoom to selection',
   'zaznaczanie': 'select', 'odznacz': 'deselect', 'ukryj interfejs': 'hide interface', 'przytrzymaj i przeciągnij: przesuwanie płótna': 'hold and drag: pan the canvas',
   'Kółko myszy przybliża': 'Mouse wheel zooms', 'Kółko myszy przesuwa': 'Mouse wheel pans', 'Ustawienia': 'Settings', 'wciśnięte kółko': 'wheel button',
+  'Przypięty na wierzchu': 'Pinned on top',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
 };
