@@ -162,7 +162,7 @@ function createWindow() {
   const b = settings.bounds || {};
   const win = new BrowserWindow({
     width: b.width || 1400, height: b.height || 900, x: b.x, y: b.y,
-    minWidth: 720, minHeight: 480,
+    minWidth: 320, minHeight: 220, // mały blat z referencjami w rogu ekranu (także „zawsze na wierzchu”)
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#161616' : '#f7f7f5',
     title: 'Blat', show: false,
     ...(isMac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 19 } }
