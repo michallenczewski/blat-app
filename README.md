@@ -22,6 +22,7 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | ⌃⌘F | Ctrl+spacja | pełny ekran (Esc wychodzi) |
 | ? | ? | ściąga ze wszystkimi skrótami |
 | M | M | mazak: rysowanie po obrazach (Shift: prosta kreska, Esc kończy) |
+| E | E | gumka do kresek mazaka (usuwa całe kreski) |
 
 ## Rozwój
 

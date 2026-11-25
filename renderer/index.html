@@ -99,6 +99,17 @@ main.space{cursor:grab}
 main.tool-note{cursor:text}
 main.tool-frame{cursor:crosshair}
 main.tool-pen{cursor:crosshair}
+main.gum{cursor:none}
+#gumCur{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;box-shadow:0 0 0 1.5px var(--text),inset 0 0 0 1px var(--bg);pointer-events:none;display:none;z-index:50}
+main.gum #gumCur{display:block}
+/* opcje mazaka: wysuwają się obok narzędzi, gdy mazak jest włączony albo zaznaczono kreskę */
+.penopts{display:flex;align-items:center;gap:2px;border-radius:9px;background:var(--soft);overflow:hidden;max-width:0;opacity:0;padding:2px 0;margin-left:-10px;transition:max-width .42s var(--spring),opacity .2s,margin .3s,padding .3s}
+.penopts.on{max-width:330px;opacity:1;margin-left:0;padding:2px}
+.penopts .ib{width:26px}
+.penopts .dot{width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.12),0 0 0 2px var(--cardline)}
+.penopts .ib.wybr{background:var(--toolon);box-shadow:0 0 0 1px var(--cardline),0 1px 2px rgba(0,0,0,.06)}
+.penopts .sp{width:1px;height:16px;background:var(--line);margin:0 3px;flex:none}
+@media (max-width:600px){.penopts.on{max-width:0;opacity:0;padding:2px 0;margin-left:-10px}}
 /* kreski mazaka: obszar kreski nie zasłania obrazu, klikalna jest tylko sama kreska (szerszy, niewidoczny ślad .hit) */
 .it.drawing{pointer-events:none}
 .it.drawing svg{display:block;width:100%;height:100%;overflow:visible}
@@ -176,7 +187,7 @@ body.bare.ontop.moving #pinMark{display:none}
   <button class="ib" id="sideBtn"></button>
   <div class="title"><span class="p" data-t="Blaty"></span><span class="s">/</span><b id="bname"></b><span class="saved" id="saved"></span></div>
   <div class="gap"></div>
-  <div class="tools" id="tools"></div>
+  <div class="tools" id="tools"></div><div class="penopts" id="penopts"></div>
   <span class="sep"></span>
   <button class="ib" id="arrangeBtn"></button>
   <button class="ib" id="topBtn"></button>
@@ -189,7 +200,7 @@ body.bare.ontop.moving #pinMark{display:none}
 </aside>
 <main id="main" tabindex="0">
   <div id="world"></div>
-  <div id="marq"></div>
+  <div id="marq"></div><div id="gumCur"></div>
   <div class="empty"><div class="big" id="emptyBig"></div><div id="emptySub"></div><div class="keys" id="emptyKeys"></div></div>
   <div class="zoom"><span id="zoomHint"></span><b id="zoomPct">100%</b></div>
 </main>

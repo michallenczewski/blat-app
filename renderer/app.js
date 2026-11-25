@@ -16,6 +16,7 @@ const IC = {
   select: svg('<path d="M4 2.5 12 8l-3.6.9L10.5 13l-1.6.8-2.1-4.1L4 12.5z"/>'),
   note: svg('<path d="M3 3.5h10M8 3.5v9"/>'),
   frame: svg('<rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M5 6.5h3"/>'),
+  gum: svg('<path d="M6.2 13.5h7.3M2.9 9.8l6.6-6.6a1.5 1.5 0 0 1 2.1 0l1.8 1.8a1.5 1.5 0 0 1 0 2.1L7.8 13.5H6.2L2.9 10.2a.3.3 0 0 1 0-.4z"/><path d="M5.6 7.1l4.3 4.3"/>'),
   pen: svg('<path d="M3 13l.9-3.2 7-7a1.6 1.6 0 0 1 2.3 2.3l-7 7z"/><path d="M9.6 4.1l2.3 2.3"/>'),
   // porządkowanie: dwa paski jeden pod drugim (w 15 px musi być bardzo proste)
   arrange: svg('<rect x="2.5" y="3.5" width="11" height="3.5" rx="1"/><rect x="2.5" y="9" width="11" height="3.5" rx="1"/>'),
@@ -59,6 +60,65 @@ function movingSet() {
 // Kreska to element „drawing”: punkty względem (x, y) w rozmiarze bazowym bw × bh, grubość sw, kolor c,
 // parent = id obrazu, na którym ją narysowano (przesuwa się, skaluje i znika razem z nim).
 const PEN = '#E5484D';
+// kolory mazaka (ostatni to półprzezroczysty zakreślacz) i grubości w px na ekranie
+const PENS = [['#E5484D', 'Czerwony'], ['#1a1a19', 'Czarny'], ['#2F5BEA', 'Niebieski'], ['#FFD21F', 'Zakreślacz', true]];
+const SIZES = [[2, 'Cienki'], [4, 'Średni'], [8, 'Gruby']];
+let penSt = { c: 0, w: 1 }, gum = false;
+try { Object.assign(penSt, JSON.parse(localStorage.getItem('blatPen') || '{}')); } catch (e) {}
+const penPx = (c, w) => SIZES[w][0] * (PENS[c][2] ? 2.2 : 1);
+function penSel() { return board ? selItems().filter(i => i.type === 'drawing') : []; }
+// zmiana koloru/grubości: na zaznaczonych kreskach albo jako ustawienie mazaka
+function setPen(o) {
+  const ds = penSel();
+  if (ds.length && tool !== 'pen') {
+    snapshot();
+    for (const d of ds) {
+      const ci = o.c != null ? o.c : Math.max(0, PENS.findIndex(p => p[0] === d.c)), cur = d.w / d.bw;
+      const wi = o.w != null ? o.w : SIZES.reduce((b, s, i) => Math.abs(s[0] * (d.hl ? 2.2 : 1) - d.sw * cur * board.view.z) < Math.abs(SIZES[b][0] * (d.hl ? 2.2 : 1) - d.sw * cur * board.view.z) ? i : b, 0);
+      d.c = PENS[ci][0]; d.hl = !!PENS[ci][2]; d.sw = penPx(ci, wi) / (board.view.z * cur);
+    }
+    drawAll(); changed(); return;
+  }
+  if (o.c != null) penSt.c = o.c; if (o.w != null) penSt.w = o.w;
+  gum = false; try { localStorage.setItem('blatPen', JSON.stringify(penSt)); } catch (e) {}
+  renderPenOpts();
+}
+function setGum(v) { if (v && tool !== 'pen') setTool('pen'); if (v && !gum) tip(_t('Gumka: przeciągnij po kreskach · M wraca do mazaka')); gum = !!v; renderPenOpts(); }
+// gumka usuwa całe kreski, których dotknie (promień ~10 px na ekranie)
+function eraseAt(x, y, noSnap) {
+  const r = 10 / board.view.z, hit = [];
+  for (const d of board.items) {
+    if (d.type !== 'drawing') continue;
+    const k = d.w / d.bw, half = d.sw * k / 2;
+    if (x < d.x - r || x > d.x + d.w + r || y < d.y - r || y > d.y + d.h + r) continue;
+    for (let i = 1; i < d.pts.length; i++) {
+      const ax = d.x + d.pts[i - 1][0] * k, ay = d.y + d.pts[i - 1][1] * k, bx = d.x + d.pts[i][0] * k, by = d.y + d.pts[i][1] * k;
+      const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L));
+      if (Math.hypot(ax + t * dx - x, ay + t * dy - y) <= r + half) { hit.push(d.id); break; }
+    }
+  }
+  if (!hit.length) return false;
+  if (!noSnap) snapshot();
+  const h = new Set(hit); board.items = board.items.filter(i => !h.has(i.id)); for (const id of h) sel.delete(id);
+  drawAll(); changed(); return true;
+}
+let penOptsKey = '';
+function renderPenOpts() {
+  const box = $('#penopts'); if (!box) return;
+  const ds = tool === 'pen' ? [] : penSel(), show = tool === 'pen' || ds.length > 0;
+  const cur = ds.length ? { c: PENS.findIndex(p => p[0] === ds[0].c), w: -1 } : penSt;
+  const key = [show, cur.c, cur.w, gum, ds.length > 0, _lang].join();
+  main.classList.toggle('gum', tool === 'pen' && gum);
+  if (key === penOptsKey) return; penOptsKey = key;
+  box.classList.toggle('on', show);
+  box.innerHTML = (ds.length ? '' : '<button class="ib gm' + (gum ? ' wybr' : '') + '" title="' + _t('Gumka') + ' (E)">' + IC.gum + '</button><span class="sp"></span>')
+    + PENS.map(([c, n, hl], i) => '<button class="ib k' + (cur.c === i && !gum ? ' wybr' : '') + '" data-k="' + i + '" title="' + _t(n) + '"><span class="dot" style="background:' + c + (hl ? ';opacity:.75' : '') + '"></span></button>').join('')
+    + '<span class="sp"></span>'
+    + SIZES.map(([w, n], i) => '<button class="ib g' + (cur.w === i && !gum ? ' wybr' : '') + '" data-g="' + i + '" title="' + _t(n) + '"><svg width="16" height="16" aria-hidden="true"><line x1="3.5" y1="12.5" x2="12.5" y2="3.5" stroke="currentColor" stroke-linecap="round" stroke-width="' + [1.4, 2.6, 4.4][i] + '"/></svg></button>').join('');
+  const g = box.querySelector('.gm'); if (g) g.onclick = () => setGum(!gum);
+  box.querySelectorAll('.k').forEach(b => b.onclick = () => setPen({ c: +b.dataset.k }));
+  box.querySelectorAll('.g').forEach(b => b.onclick = () => setPen({ w: +b.dataset.g }));
+}
 const kidsOf = id => board.items.filter(o => o.type === 'drawing' && o.parent === id);
 function imageUnder(ptsAbs) {
   // od wierzchu: wyższe z, a przy równym z później dodany (tak samo jak na ekranie)
@@ -72,7 +132,7 @@ function penPath(pts) {
   for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; d += 'Q' + pts[i][0] + ' ' + pts[i][1] + ' ' + mx.toFixed(1) + ' ' + my.toFixed(1); }
   const l = pts[pts.length - 1]; return d + 'L' + l[0] + ' ' + l[1];
 }
-function makeDrawing(ptsAbs, sw, c) {
+function makeDrawing(ptsAbs, sw, c, hl) {
   if (ptsAbs.length < 2) return null;
   snapshot();
   let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
@@ -81,6 +141,7 @@ function makeDrawing(ptsAbs, sw, c) {
   const pts = ptsAbs.map(([px, py]) => [Math.round((px - x) * 10) / 10, Math.round((py - y) * 10) / 10]);
   const top = Math.max(0, ...board.items.map(i => i.z || 0));
   const d = { id: uid(), type: 'drawing', x, y, w, h, bw: w, bh: h, pts, sw, c: c || PEN, parent: imageUnder(ptsAbs), z: top + 1 };
+  if (hl) d.hl = true;
   board.items.push(d); drawAll(); changed(); return d.id;
 }
 // kreski przesunięte bez swojego obrazu szukają obrazu pod sobą
@@ -133,7 +194,8 @@ function drawItem(it) {
   if (it.type === 'drawing') {
     const s = el.firstChild, d = penPath(it.pts);
     if (s.dataset.d !== d) { s.dataset.d = d; s.setAttribute('viewBox', '0 0 ' + it.bw + ' ' + it.bh); s.querySelector('.ln').setAttribute('d', d); s.querySelector('.hit').setAttribute('d', d); }
-    s.querySelector('.ln').setAttribute('stroke', it.c || PEN); s.querySelector('.ln').setAttribute('stroke-width', it.sw);
+    const ln = s.querySelector('.ln'); ln.setAttribute('stroke', it.c || PEN); ln.setAttribute('stroke-width', it.sw);
+    ln.style.opacity = it.hl ? .45 : ''; ln.style.mixBlendMode = it.hl ? 'multiply' : '';   // zakreślacz: tekst pod nim zostaje czytelny
     s.querySelector('.hit').setAttribute('stroke-width', Math.max(it.sw * 1.5, 12 / board.view.z * (it.bw / it.w)));   // ok. 12 px na ekranie, nie mniej niż kreska
   }
   if (it.type === 'image') { const im = el.firstChild, s = imgSrc(it); if (im.getAttribute('src') !== s) im.src = s; }
@@ -163,7 +225,7 @@ function ranks() {
     .sort((a, b) => ((a[0].z || 0) - (b[0].z || 0)) || (a[1] - b[1])).map(([o], r) => [o.id, r]));
 }
 function drawAll() {
-  ranks();
+  ranks(); renderPenOpts();
   const ids = new Set(board.items.map(i => i.id));
   for (const [id, el] of els) if (!ids.has(id)) { el.remove(); els.delete(id); }
   for (const it of board.items) drawItem(it);
@@ -445,11 +507,13 @@ main.addEventListener('pointerdown', e => {
     drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, vx: board.view.x, vy: board.view.y }; main.classList.add('panning');
   } else if (e.button !== 0) return;
   else if (tool === 'note') { addNote(w); setTool('select'); return; }
+  else if (tool === 'pen' && gum) { drag = { kind: 'gum', snap: false }; if (eraseAt(w.x, w.y)) drag.snap = true; }
   else if (tool === 'pen') {
+    const P = PENS[penSt.c], sw = penPx(penSt.c, penSt.w) / board.view.z;
     const live = document.createElement('div'); live.className = 'it drawing live';
-    live.innerHTML = '<svg fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="' + PEN + '" stroke-width="' + (3 / board.view.z) + '"/></svg>';
+    live.innerHTML = '<svg fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="' + P[0] + '" stroke-width="' + sw + '"' + (P[2] ? ' style="opacity:.45;mix-blend-mode:multiply"' : '') + '/></svg>';
     world.appendChild(live); sel.clear(); drawAll();
-    drag = { kind: 'pen', pts: [[w.x, w.y]], sw: 3 / board.view.z, live };
+    drag = { kind: 'pen', pts: [[w.x, w.y]], sw, c: P[0], hl: !!P[2], live };
   }
   else if (tool === 'frame') { snapshot(); const f = { id: uid(), type: 'frame', x: w.x, y: w.y, w: 1, h: 1, name: _t('Ramka'), z: 0 }; board.items.push(f); sel = new Set([f.id]); drawAll(); drag = { kind: 'newframe', f, ox: w.x, oy: w.y }; }
   else if (e.target.classList.contains('hd') && item) {
@@ -474,6 +538,7 @@ main.addEventListener('pointermove', e => {
   if (!(e.buttons & 7)) { endDrag(); return; }
   const w = toWorld(e.clientX, e.clientY);
   if (drag.kind === 'pan') { board.view.x = drag.vx + e.clientX - drag.sx; board.view.y = drag.vy + e.clientY - drag.sy; applyView(); }
+  else if (drag.kind === 'gum') { if (eraseAt(w.x, w.y, drag.snap)) drag.snap = true; }
   else if (drag.kind === 'pen') {
     const p = drag.pts, r2 = v => Math.round(v * 10) / 10;
     if (e.shiftKey) drag.pts = [p[0], [r2(w.x), r2(w.y)]];
@@ -513,7 +578,7 @@ function endDrag() {
   if (d.kind === 'pen') {
     d.live.remove();
     const len = d.pts.reduce((s, p, i) => i ? s + Math.hypot(p[0] - d.pts[i - 1][0], p[1] - d.pts[i - 1][1]) : 0, 0);
-    if (len * board.view.z >= 3) makeDrawing(d.pts, d.sw);
+    if (len * board.view.z >= 3) makeDrawing(d.pts, d.sw, d.c, d.hl);
   }
   if (d.kind === 'move' && d.moved) {
     reparent(new Set(d.start.map(([o]) => o.id)));
@@ -639,10 +704,11 @@ main.addEventListener('pointermove', e => { lastPointer = { x: e.clientX, y: e.c
 /* ---------- klawiatura ---------- */
 function setTool(t) {
   if (t === 'pen' && tool !== 'pen') tip(_t('Mazak: rysuj po obrazach · Shift prosta kreska · Esc kończy'));
-  tool = t;
+  tool = t; if (t !== 'pen') gum = false;
   for (const b of document.querySelectorAll('#tools .ib')) b.classList.toggle('on', b.dataset.tool === t);
   const on = $('#tools .ib.on'), ind = $('#tools .ind'); if (on && ind) ind.style.transform = 'translateX(' + on.offsetLeft + 'px)';
   main.className = main.className.replace(/\btool-\w+/g, '').trim(); if (t !== 'select') main.classList.add('tool-' + t);
+  renderPenOpts();
 }
 addEventListener('keydown', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable)) return;
@@ -666,7 +732,8 @@ addEventListener('keydown', e => {
   else if (k === 'v') setTool('select');
   else if (k === 't') setTool('note');
   else if (k === 'f') setTool('frame');
-  else if (k === 'm') setTool('pen');
+  else if (k === 'm') { setTool('pen'); setGum(false); }
+  else if (k === 'e') setGum(true);
   else if (k === 'a') arrange();
   else if (k === 'p') toggleTop();
   else if (k === '0') fit();
@@ -752,7 +819,7 @@ function renderKeys() {
   ];
   $('#keys').innerHTML = '<div class="kc"><div class="kh"><b>' + _t('Skróty klawiszowe') + '</b><span>' + _t('? otwiera tę ściągę · Esc zamyka') + '</span></div>'
     + row(0, [K('1', _t('100%')), K('0', _t('całość'))])
-    + row(20, [K('T', _t('notatka')), K('P', _t('zawsze na wierzchu'))])
+    + row(20, [K('E', _t('gumka')), K('T', _t('notatka')), K('P', _t('zawsze na wierzchu'))])
     + row(34, [K('A', _t('ułóż zaznaczone')), K('F', _t('ramka'))])
     + row(54, [K('Z', _t('dopasuj zaznaczone')), K('V', _t('zaznaczanie') + '<em>Esc ' + _t('odznacz') + '</em>'), K('M', _t('mazak') + '<em>⇧ ' + _t('prosta kreska') + '</em>')])
     + row(0, [K('Tab', _t('ukryj interfejs'), 'w'), K(_t('spacja'), _t('przytrzymaj i przeciągnij: przesuwanie płótna'), 'sp')])
@@ -803,6 +870,7 @@ function initUi() {
   $('#pillUi').innerHTML = IC.ui; $('#pillUi').onclick = e => { e.stopPropagation(); toggleBare(false); };
   $('#pillFs').innerHTML = IC.fs; $('#pillFs').onclick = e => { e.stopPropagation(); fullscreenToggle(); };
   let idleT = 0;
+  main.addEventListener('pointermove', e => { const g = $('#gumCur'), r = main.getBoundingClientRect(); g.style.left = (e.clientX - r.left) + 'px'; g.style.top = (e.clientY - r.top) + 'px'; }, { passive: true });
   addEventListener('mousemove', () => { document.body.classList.add('moving'); syncButtons(); clearTimeout(idleT); idleT = setTimeout(() => { document.body.classList.remove('moving'); syncButtons(); }, 2000); }, { passive: true });
   if (api.onFullscreen) api.onFullscreen(onFullscreen); else document.addEventListener('fullscreenchange', () => onFullscreen(!!document.fullscreenElement));
   setTool('select'); emptyTexts(); applyTheme(); pillTips();
@@ -833,7 +901,9 @@ window.blatTest = {
     return (await addImages(out)).map(i => i.id);
   },
   note: (x, y, text) => addNote({ x, y }, text).id,
-  stroke: (pts, sw) => makeDrawing(pts, sw || 3 / board.view.z),
+  stroke: (pts, sw) => makeDrawing(pts, sw || penPx(penSt.c, penSt.w) / board.view.z, PENS[penSt.c][0], !!PENS[penSt.c][2]),
+  pen: o => { if (o) setPen(o); return { ...penSt }; },
+  eraseAt: (x, y) => eraseAt(x, y),
   select: ids => { sel = new Set(ids); drawAll(); },
   selectAll: () => { sel = new Set(board.items.map(i => i.id)); drawAll(); },
   move: (dx, dy) => { snapshot(); const ms = movingSet(); for (const o of [...ms].map(byId)) { o.x += dx; o.y += dy; } reparent(ms); drawAll(); changed(); },
@@ -930,6 +1000,20 @@ window.blatTest = {
           ok(byId(d.id).parent !== im.id, 'kreska przesunięta strzałkami z obrazu odczepia się od niego'); this.undo(); sel.clear(); }
         ok(!els.get(d.id).querySelector('.hd') || (sel = new Set([d.id]), drawAll(), !els.get(d.id).querySelector('.hd')), 'sama kreska nie ma uchwytu zmiany rozmiaru'); sel.clear(); drawAll();
         sel = new Set([d.id]); this.remove(); sel.clear(); drawAll();
+        // kolory, grubości i gumka
+        if (typeof this.pen !== 'function') ok(false, 'mazak: jest polecenie blatTest.pen');
+        else {
+          const p0 = this.pen(); this.pen({ c: 3, w: 2 });
+          const hl = byId(this.stroke([[im.x + 30, im.y + 60], [im.x + 160, im.y + 62]]));
+          ok(hl && hl.hl === true && hl.c !== PEN && hl.sw > byId(this.stroke([[im.x + 30, im.y + 90], [im.x + 60, im.y + 92]])).sw * 0 + 0, 'zakreślacz zapisuje się jako półprzezroczysta kreska w swoim kolorze');
+          this.pen({ c: 1, w: 0 }); const th = byId(this.stroke([[im.x + 30, im.y + 120], [im.x + 160, im.y + 122]]));
+          ok(th && th.sw < hl.sw && th.c !== hl.c && !th.hl, 'cienka czarna kreska jest cieńsza od zakreślacza');
+          sel = new Set([th.id]); this.pen({ c: 2 }); ok(byId(th.id).c === PENS[2][0], 'kolor zmienia się na zaznaczonej kresce');
+          sel.clear(); const n1 = board.items.filter(i => i.type === 'drawing').length;
+          this.eraseAt(im.x + 90, im.y + 121); ok(!byId(th.id) && board.items.filter(i => i.type === 'drawing').length === n1 - 1, 'gumka usuwa dotkniętą kreskę w całości');
+          this.undo(); ok(byId(th.id), 'cofnięcie przywraca wymazaną kreskę');
+          for (const o of board.items.filter(i => i.type === 'drawing')) sel.add(o.id); this.remove(); sel.clear(); this.pen(p0); drawAll();
+        }
       } }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');

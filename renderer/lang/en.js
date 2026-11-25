@@ -27,5 +27,7 @@ window.BLAT_EN = {
   'Kółko myszy przybliża': 'Mouse wheel zooms', 'Kółko myszy przesuwa': 'Mouse wheel pans', 'Ustawienia': 'Settings', 'wciśnięte kółko': 'wheel button',
   'Przypięty na wierzchu': 'Pinned on top',
   'Mazak': 'Marker', 'mazak': 'marker', 'prosta kreska': 'straight line', 'Mazak: rysuj po obrazach · Shift prosta kreska · Esc kończy': 'Marker: draw on images · Shift for a straight line · Esc to finish',
+  'Gumka': 'Eraser', 'gumka': 'eraser', 'Czerwony': 'Red', 'Czarny': 'Black', 'Niebieski': 'Blue', 'Zakreślacz': 'Highlighter', 'Cienki': 'Thin', 'Średni': 'Medium', 'Gruby': 'Thick',
+  'Gumka: przeciągnij po kreskach · M wraca do mazaka': 'Eraser: drag over strokes · M returns to the marker',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
 };
