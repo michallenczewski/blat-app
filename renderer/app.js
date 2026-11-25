@@ -324,7 +324,7 @@ function renameStart() {
     if (ok && v && v !== board.name) {
       await saveNow();
       const n = await api.boardRename(board.name, v);
-      if (n) { board.name = n; b.textContent = n; document.title = n + ' — Blat'; dirty = true; saveNow(); drawAll(); }
+      if (n) { if (clip && clip.board === board.name) clip.board = n; board.name = n; b.textContent = n; document.title = n + ' — Blat'; dirty = true; saveNow(); drawAll(); }
       else tip(_t('Blat o tej nazwie już istnieje'));
     }
   };
@@ -634,6 +634,10 @@ main.addEventListener('contextmenu', e => {
   if (it && !sel.has(it.id)) { sel = new Set([it.id]); drawAll(); }
   const p = toWorld(e.clientX, e.clientY);
   showMenu(e.clientX, e.clientY, sel.size ? [
+    [_t('Kopiuj'), () => { const t = copySel(); try { navigator.clipboard.writeText(t); } catch (e) {} }, MOD + 'C'],
+    [_t('Wytnij'), () => { const t = cutSel(); try { navigator.clipboard.writeText(t); } catch (e) {} }, MOD + 'X'],
+    [_t('Powiel'), duplicateSel, MOD + 'D'],
+    '-',
     [_t('Ułóż'), arrange, 'A'],
     [_t('Ramka wokół zaznaczonych'), () => frameAround(selItems()), MOD + 'G'],
     [_t('Na wierzch'), () => reorder(1)], [_t('Na spód'), () => reorder(-1)],
@@ -685,7 +689,7 @@ document.addEventListener('paste', async e => {
   e.preventDefault();
   const p = pastePoint();
   const files = [...(e.clipboardData.files || [])];
-  if (!files.length && clip && e.clipboardData.getData('text/plain') === clip.text) { pasteClip(p); return; }
+  if (!files.length && isOurClip(e.clipboardData.getData('text/plain'))) { pasteClip(p); return; }
   if (files.length) { addImages(await filesToBlobs(files), p); return; }
   const text = e.clipboardData.getData('text/plain');
   if (text) addNote(p, text);
@@ -693,7 +697,9 @@ document.addEventListener('paste', async e => {
 /* ---------- kopiowanie elementów ---------- */
 // clip: kopia elementów (z ramką i jej zawartością, z kreskami obrazów), blat źródłowy i tekst zapisany w schowku systemowym,
 // po którym przy wklejaniu poznajemy, że w schowku jest nasza kopia, a nie coś z innego programu
-let clip = null;
+let clip = null, lastPaste = null;
+const eol = t => (t || '').replace(/\r\n/g, '\n');
+const isOurClip = t => !!clip && eol(t) === eol(clip.text);   // schowek Windows potrafi zamienić \n na \r\n
 function copySel() {
   if (!sel.size) return null;
   const items = [...movingSet()].map(byId).filter(Boolean).map(o => JSON.parse(JSON.stringify(o)));
@@ -706,7 +712,10 @@ async function pasteClip(at, offset) {
   if (!clip || !clip.items.length) return false;
   const items = clip.items.map(o => JSON.parse(JSON.stringify(o)));
   // obrazy z innego blatu: kopiujemy ich pliki do bieżącego
-  if (clip.board !== board.name) for (const o of items) if (o.img) for (const f of [o.img.full, o.img.thumb]) if (f) await api.imageCopy(clip.board, board.name, f);
+  let missing = 0;
+  if (clip.board !== board.name) for (const o of items) if (o.img) for (const f of [o.img.full, o.img.thumb]) if (f && !(await api.imageCopy(clip.board, board.name, f))) missing++;
+  lastPaste = { missing };
+  if (missing) tip(_t('Nie znalazłem plików części obrazów — blat źródłowy usunięto albo przeniesiono'));
   snapshot();
   const map = new Map(items.map(o => [o.id, uid()])), b = bbox(items.filter(o => o.type !== 'drawing').length ? items.filter(o => o.type !== 'drawing') : items);
   const dx = offset ? offset : at.x - (b.x + b.w / 2), dy = offset ? offset : at.y - (b.y + b.h / 2);
@@ -720,6 +729,7 @@ async function pasteClip(at, offset) {
   sel = new Set(items.map(o => o.id)); drawAll(); changed(); return true;
 }
 const pastePoint = () => lastPointer && document.elementFromPoint(lastPointer.x, lastPointer.y)?.closest('main') ? toWorld(lastPointer.x, lastPointer.y) : centerWorld();
+function cutSel() { const t = copySel(); if (t == null) return null; sel = movingSet(); removeSel(); return t; }   // ramka razem z zawartością
 function duplicateSel() { if (!sel.size) return; const keep = clip; copySel(); pasteClip(null, Math.round(24 / board.view.z)); clip = keep || clip; }
 document.addEventListener('copy', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) return;
@@ -727,10 +737,10 @@ document.addEventListener('copy', e => {
 });
 document.addEventListener('cut', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) return;
-  e.preventDefault(); e.clipboardData.setData('text/plain', copySel()); removeSel();
+  e.preventDefault(); e.clipboardData.setData('text/plain', cutSel());
 });
 async function pasteFromClipboard(p) {
-  try { if (clip && (await navigator.clipboard.readText()) === clip.text) { pasteClip(p); return; } } catch (e) {}
+  try { if (isOurClip(await navigator.clipboard.readText())) { pasteClip(p); return; } } catch (e) {}
   try {
     for (const ci of await navigator.clipboard.read()) {
       const t = ci.types.find(x => x.startsWith('image/'));
@@ -853,7 +863,7 @@ function renderKeys() {
   const K = (k, t, c) => '<div class="k' + (c ? ' ' + c : '') + '"><i>' + k + '</i><small>' + t + '</small></div>';
   const row = (m, ks) => '<div class="kr" style="margin-left:' + m + 'px">' + ks.join('') + '</div>';
   const L = [
-    [MOD + 'V', _t('wklej obraz albo tekst')], [MOD + 'G', _t('ramka wokół zaznaczonych')],
+    [MOD + 'V', _t('wklej obraz albo tekst')], [MOD + 'C  ' + MOD + 'X', _t('kopiuj / wytnij elementy')], [MOD + 'D', _t('powiel zaznaczone')], [MOD + 'G', _t('ramka wokół zaznaczonych')],
     [isMac ? '⌘Z  ⇧⌘Z' : 'Ctrl+Z  Ctrl+Y', _t('cofnij / ponów')], [MOD + 'N', _t('nowy blat')],
     [MOD + 'A', _t('zaznacz wszystko')], [wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'), _t('przybliżanie')],
     [_t('strzałki'), _t('przesuń zaznaczone') + ' (⇧ ×10)'], [isMac ? '⌫' : 'Delete', _t('usuń zaznaczone')],
@@ -869,7 +879,7 @@ function renderKeys() {
 }
 function toggleKeys(v) { const o = $('#keys'); v = v == null ? !keysOpen() : v; if (v) renderKeys(); o.classList.toggle('on', v); if (v) try { localStorage.setItem('blatSeenKeys', '1'); } catch (e) {} }
 function wheelTexts() { $('#zoomHint').textContent = wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'); if (keysOpen()) renderKeys(); }
-// ustawienia: na razie tylko zachowanie kółka myszy
+// ustawienia: kółko myszy, aktywowanie po najechaniu (Mac), wersja i aktualizacje
 // ustawienia: kółko myszy, aktywowanie po najechaniu, wersja i aktualizacje
 let updState = null;
 function showSettings() {
@@ -878,8 +888,7 @@ function showSettings() {
     [_t('Kółko myszy przybliża'), () => setWheelMode('zoom'), wheelMode === 'zoom' ? '✓' : ''],
     [_t('Kółko myszy przesuwa'), () => setWheelMode('pan'), wheelMode === 'pan' ? '✓' : ''],
     '-',
-    [_t('Aktywuj Blat po najechaniu kursorem'), () => setHoverFocus(!hoverFocus), hoverFocus ? '✓' : ''],
-    '-',
+    ...(isMac || api.web ? [[_t('Aktywuj Blat po najechaniu kursorem'), () => setHoverFocus(!hoverFocus), hoverFocus ? '✓' : ''], '-'] : []),
     ['Blat ' + (u.current || ''), () => {}, '', 'info']
   ];
   if (u.state === 'available' || u.state === 'downloading') rows.push([_t('Zainstaluj wersję') + ' ' + u.version, () => api.updateInstall && api.updateInstall()]);
@@ -900,7 +909,7 @@ let hoverFocus = false; try { hoverFocus = localStorage.getItem('blatHoverFocus'
 function setHoverFocus(v) { hoverFocus = !!v; try { localStorage.setItem('blatHoverFocus', hoverFocus ? '1' : '0'); } catch (e) {} if (v) tip(_t('Blat stanie się aktywny, gdy najedziesz na niego kursorem')); }
 let hoverT = 0;
 document.addEventListener('mousemove', () => {
-  if (!hoverFocus || document.hasFocus() || !api.focusWindow || Date.now() - hoverT < 800) return;
+  if (!hoverFocus || !isMac || document.hasFocus() || !api.focusWindow || Date.now() - hoverT < 800) return;
   hoverT = Date.now(); api.focusWindow();
 }, { passive: true });
 /* ---------- podpowiedzi przy przyciskach ---------- */
@@ -924,6 +933,9 @@ document.addEventListener('pointerover', e => {
   hintT = setTimeout(() => { if (hintEl === el) hintShow(el); }, Date.now() - hintLast < 400 ? 0 : 450);
 });
 document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.ib, #upd'); if (el && el === hintEl && !el.contains(e.relatedTarget)) hintHide(); });
+// opis zmieniony przez program (przypinka, motyw, pełny ekran…) też trafia do data-tip, bez systemowego dymka
+new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (!el.title) continue; el.dataset.tip = el.title; el.removeAttribute('title'); if (el === hintEl && $('#hint').classList.contains('on')) hintShow(el); } })
+  .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['title'] });
 addEventListener('pointerdown', hintHide, true); addEventListener('wheel', hintHide, { passive: true });
 let onTop = false;
 // przypięcie na wierzchu: pomarańczowy przycisk z pełną pinezką; w trybie bez nawigacji mała pinezka w rogu
@@ -993,7 +1005,7 @@ window.blatTest = {
   note: (x, y, text) => addNote({ x, y }, text).id,
   stroke: (pts, sw) => makeDrawing(pts, sw || penPx(penSt.c, penSt.w) / board.view.z, PENS[penSt.c][0], !!PENS[penSt.c][2]),
   pen: o => { if (o) setPen(o); return { ...penSt }; },
-  copy: () => copySel(), cut: () => { const t = copySel(); removeSel(); return t; }, paste: () => pasteClip(centerWorld()), duplicate: () => duplicateSel(),
+  copy: () => copySel(), cut: () => cutSel(), paste: () => pasteClip(centerWorld()), duplicate: () => duplicateSel(),
   eraseAt: (x, y) => eraseAt(x, y),
   select: ids => { sel = new Set(ids); drawAll(); },
   selectAll: () => { sel = new Set(board.items.map(i => i.id)); drawAll(); },
@@ -1121,9 +1133,15 @@ window.blatTest = {
       const cut = board.items.find(i => i.type === 'note') || byId(this.note(im.x, im.y - 80, 'do wycięcia')); const nb = board.items.length;
       sel = new Set([cut.id]); this.cut(); ok(!byId(cut.id) && board.items.length === nb - 1, 'wycinanie usuwa element');
       await this.paste(); ok(board.items.length === nb && board.items.some(i => i.type === 'note' && i.text === cut.text), 'wklejenie wyciętej notatki');
+      // wycięcie ramki zabiera też jej zawartość (uwaga recenzenta)
+      { const f = board.items.find(i => i.type === 'frame'); if (f) { const inside0 = board.items.filter(o => o.type !== 'frame' && inside(o, f)).map(o => o.id); const nb2 = board.items.length;
+          sel = new Set([f.id]); this.cut(); ok(!byId(f.id) && inside0.every(id => !byId(id)) && board.items.length === nb2 - 1 - inside0.length - board.items.filter(() => false).length, 'wycięcie ramki zabiera jej zawartość');
+          this.undo(); ok(byId(f.id) && inside0.every(id => byId(id)), 'cofnięcie wycięcia ramki'); } }
+      // tekst ze schowka z końcami wierszy Windows nadal rozpoznany jako nasza kopia
+      { sel = new Set([cut.id]); const t = this.copy(); ok(isOurClip(t.replace(/\n/g, '\r\n')), 'kopia rozpoznana także z końcami wierszy Windows'); }
       // na inny blat: pliki obrazów jadą razem z nim
       const src = board.name; sel = new Set([im.id]); this.copy(); await this.newBoard('Wklejanie ' + Date.now()); await this.paste();
-      const ni = board.items.find(i => i.type === 'image'); ok(ni && api.imageUrl(board.name, ni.img.full), 'obraz wklejony na inny blat ma swój plik w nowym blacie');
+      const ni = board.items.find(i => i.type === 'image'); ok(ni && lastPaste && lastPaste.missing === 0, 'obraz wklejony na inny blat ma swój plik w nowym blacie');
       const tmp = board.name; await this.open(src); await api.boardTrash(tmp); await refreshBoards();
       sel = new Set([dr.id]); this.remove(); sel.clear(); drawAll();
     }
@@ -1132,6 +1150,8 @@ window.blatTest = {
       ok(/Blat \S+/.test(t) && t.includes(_t('Sprawdź aktualizacje')), 'ustawienia pokazują wersję i „Sprawdź aktualizacje”');
       ok(t.includes(_t('Aktywuj Blat po najechaniu kursorem')), 'ustawienia mają aktywowanie po najechaniu'); hideMenu();
       const r0 = typeof hoverFocus !== 'undefined' && hoverFocus; if (typeof setHoverFocus === 'function') { setHoverFocus(true); ok(localStorage.getItem('blatHoverFocus') === '1', 'aktywowanie po najechaniu zapamiętane'); setHoverFocus(r0); } }
+    // zmiana opisu przycisku (np. przypinka) nie przywraca systemowego dymka (uwaga recenzenta)
+    { toggleTop(true); toggleTop(false); await new Promise(r => setTimeout(r, 30)); ok(!$('#topBtn').title && ($('#topBtn').dataset.tip || '').length > 0, 'przycisk po zmianie opisu nie ma systemowego dymka'); }
     // podpowiedź po zatrzymaniu kursora na narzędziu
     { const b = $('#tools .ib[data-tool="pen"]'); b.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })); await new Promise(r => setTimeout(r, 700));
       const h = $('#hint'); ok(h && h.classList.contains('on') && h.textContent.includes(_t('Mazak')) && !b.title, 'po zatrzymaniu kursora na narzędziu pojawia się jego opis');

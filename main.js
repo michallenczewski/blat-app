@@ -93,7 +93,7 @@ ipcMain.handle('image-put', async (e, name, file, bytes) => {
 ipcMain.handle('image-copy', async (e, from, to, file) => {
   const f = file.replace(/[^a-z0-9._-]/gi, ''), src = path.join(boardPath(from), 'img', f), dst = path.join(boardPath(to), 'img', f);
   await fsp.mkdir(path.dirname(dst), { recursive: true });
-  try { await fsp.copyFile(src, dst, fs.constants.COPYFILE_EXCL); } catch (err) { if (err.code !== 'EEXIST') return false; }
+  try { await fsp.copyFile(src, dst, fs.constants.COPYFILE_EXCL); } catch (err) { if (err.code !== 'EEXIST') return false; }   // brak pliku źródłowego → false
   return true;
 });
 // usuwanie nieużywanych obrazów (po usunięciu elementów) — przy zamykaniu tablicy

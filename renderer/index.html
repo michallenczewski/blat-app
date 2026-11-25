@@ -183,6 +183,8 @@ body.bare #fspill{-webkit-app-region:no-drag}
 .fs.frame-win body.bare #pinMark{top:12px;right:14px}
 body.bare.ontop #pinMark{display:flex}
 body.bare.ontop.moving #pinMark{display:none}
+/* mniej ruchu, gdy system o to prosi (wytyczne interakcji, pkt 8) */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
 </style>
 </head>

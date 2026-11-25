@@ -7,6 +7,7 @@ Blat to lekka tablica na referencje i szkice koncepcji, samodzielny program w j�
 - Rozmawiamy po polsku. Właściciel (Michał) woli pełne zdania niż skróty oraz oszczędny, nieozdobny wygląd interfejsu, taki jak w Gapie.
 - Zmiany commituj i wypychaj sam, ale **nie wydawaj nowej wersji po każdej poprawce**. Wersję wydajemy tylko wtedy, gdy Michał o to poprosi (umiejętność `wydanie`).
 - W interfejsie i w README mówimy „blat” (blaty, nowy blat), nigdy „tablica”. W kodzie zostają angielskie nazwy (`board`), a po angielsku „board”.
+- Animacje, reakcje przycisków i podpowiedzi według `projekt/WYTYCZNE_INTERAKCJE.md` (wspólne dla całej rodziny programów).
 - Opisy skrótów i podpowiedzi muszą się zgadzać dla Maca (⌘, ⌥, Finder) i Windows (Ctrl, Alt, Eksplorator).
 - Najważniejsze są szybkość i płynność, także przy setkach obrazów na jednej tablicy.
 

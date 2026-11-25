@@ -32,5 +32,7 @@ window.BLAT_EN = {
   'Aktywuj Blat po najechaniu kursorem': 'Activate Blat on hover', 'Sprawdź aktualizacje': 'Check for updates', 'Zainstaluj wersję': 'Install version',
   'Sprawdzam aktualizacje…': 'Checking for updates…', 'Dostępna wersja': 'Version available', 'zainstalujesz ją w ustawieniach albo w bocznym pasku': 'install it from settings or the sidebar',
   'Masz najnowszą wersję': 'You have the latest version', 'Nie udało się sprawdzić aktualizacji': 'Could not check for updates', 'Blat stanie się aktywny, gdy najedziesz na niego kursorem': 'Blat will become active when you hover over it',
+  'Kopiuj': 'Copy', 'Wytnij': 'Cut', 'Powiel': 'Duplicate', 'kopiuj / wytnij elementy': 'copy / cut items', 'powiel zaznaczone': 'duplicate selection',
+  'Nie znalazłem plików części obrazów — blat źródłowy usunięto albo przeniesiono': 'Some image files were not found — the source board was deleted or moved',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
 };
