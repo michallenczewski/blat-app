@@ -26,7 +26,7 @@ Do samego przenikania kolorów i przezroczystości — zwykłe `ease` / `ease-ou
 | włączenie przełącznika (wypełnienie od środka) | 0,42 s | sprężyna |
 | „tak” — reakcja na udaną akcję | 0,5–0,55 s | sprężyna + ease-out |
 | „nie” — potrząśnięcie | 0,38 s | ease-out |
-| podpowiedź pod przyciskiem | 0,12 s przezroczystość, 0,2 s przesunięcie | ease / sprężyna |
+| podpowiedź pod przyciskiem | pojawia się po 1,5 s; 0,12 s przezroczystość, 0,2 s przesunięcie | ease / sprężyna |
 
 ## 2. Przycisk z ikoną: najechanie i wciśnięcie
 
@@ -104,7 +104,7 @@ b.classList.remove('tak', 'nie'); void b.offsetWidth; b.classList.add('tak');
 ## 6. Podpowiedź po zatrzymaniu kursora
 
 Zamiast systemowego dymka (`title`) — własna, mała etykieta pod przyciskiem: **nazwa** i obok,
-przygaszony, **skrót**. Pojawia się po **0,45 s** bez ruchu; po przejściu na sąsiedni przycisk
+przygaszony, **skrót**. Pojawia się po **1,5 s** bez ruchu; po przejściu na sąsiedni przycisk
 (w ciągu 0,4 s od zniknięcia poprzedniej) — **od razu**. Znika przy zjechaniu, kliknięciu i kółku myszy.
 Gdy pod przyciskiem brak miejsca, staje nad nim. Skróty piszemy zgodnie z systemem (⌘ ⌥ ⇧ na Macu, Ctrl Alt Shift na Windows).
 
@@ -135,7 +135,7 @@ document.addEventListener('pointerover', e => {
   const el = e.target.closest && e.target.closest('.ib'); if (!el || el === hintEl) return;
   if (el.title) { el.dataset.tip = el.title; el.removeAttribute('title'); }   // także gdy program zmieni title później
   hintHide(); hintEl = el;
-  hintT = setTimeout(() => { if (hintEl === el) hintShow(el); }, Date.now() - hintLast < 400 ? 0 : 450);
+  hintT = setTimeout(() => { if (hintEl === el) hintShow(el); }, Date.now() - hintLast < 400 ? 0 : 1500);
 });
 document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.ib'); if (el && el === hintEl && !el.contains(e.relatedTarget)) hintHide(); });
 addEventListener('pointerdown', hintHide, true); addEventListener('wheel', hintHide, { passive: true });
