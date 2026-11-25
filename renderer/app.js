@@ -19,9 +19,9 @@ const IC = {
   pen: svg('<path d="M3 13l.9-3.2 7-7a1.6 1.6 0 0 1 2.3 2.3l-7 7z"/><path d="M9.6 4.1l2.3 2.3"/>'),
   // porządkowanie: dwa paski jeden pod drugim (w 15 px musi być bardzo proste)
   arrange: svg('<rect x="2.5" y="3.5" width="11" height="3.5" rx="1"/><rect x="2.5" y="9" width="11" height="3.5" rx="1"/>'),
-  pin: svg('<path d="M6 2.5h4M8 2.5v5M5 7.5h6l-1 3H6zM8 10.5v3"/>'),
-  // przypięta: pełna główka pinezki
-  pinOn: svg('<path d="M6 2.5h4v5H6zM5 7.5h6l-1 3H6z" fill="currentColor"/><path d="M8 10.5v3"/>'),
+  // przypinka: klasyczna pinezka przechylona o 45° (wybór Michała 25.11.2026); przypięta ma pełną główkę
+  pin: svg('<g transform="rotate(45 8 8)"><path d="M5.5 2.5h5l-.8 4.5h-3.4z"/><path d="M6.3 7h3.4l1.8 2.5h-7zM8 9.5v4.5"/></g>'),
+  pinOn: svg('<g transform="rotate(45 8 8)"><path d="M5.5 2.5h5l-.8 4.5h-3.4z" fill="currentColor"/><path d="M6.3 7h3.4l1.8 2.5h-7zM8 9.5v4.5"/></g>'),
   plus: svg('<path d="M8 3v10M3 8h10"/>', 13),
   moon: svg('<path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/>'),
   ui: svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.2h12"/>'),
