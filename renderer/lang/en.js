@@ -29,5 +29,8 @@ window.BLAT_EN = {
   'Mazak': 'Marker', 'mazak': 'marker', 'prosta kreska': 'straight line', 'Mazak: rysuj po obrazach · Shift prosta kreska · Esc kończy': 'Marker: draw on images · Shift for a straight line · Esc to finish',
   'Gumka': 'Eraser', 'gumka': 'eraser', 'Czerwony': 'Red', 'Czarny': 'Black', 'Niebieski': 'Blue', 'Zakreślacz': 'Highlighter', 'Cienki': 'Thin', 'Średni': 'Medium', 'Gruby': 'Thick',
   'Gumka: przeciągnij po kreskach · M wraca do mazaka': 'Eraser: drag over strokes · M returns to the marker',
+  'Aktywuj Blat po najechaniu kursorem': 'Activate Blat on hover', 'Sprawdź aktualizacje': 'Check for updates', 'Zainstaluj wersję': 'Install version',
+  'Sprawdzam aktualizacje…': 'Checking for updates…', 'Dostępna wersja': 'Version available', 'zainstalujesz ją w ustawieniach albo w bocznym pasku': 'install it from settings or the sidebar',
+  'Masz najnowszą wersję': 'You have the latest version', 'Nie udało się sprawdzić aktualizacji': 'Could not check for updates', 'Blat stanie się aktywny, gdy najedziesz na niego kursorem': 'Blat will become active when you hover over it',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
 };

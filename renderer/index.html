@@ -124,6 +124,10 @@ main.tool-pen .it.drawing .hit{pointer-events:none}
 #menu button.warn{color:#b3261e}
 [data-theme=dark] #menu button.warn{color:#f2867e}
 #menu hr{border:0;height:1px;background:var(--line);margin:4px 6px}
+#hint{position:fixed;z-index:95;display:flex;gap:7px;align-items:center;background:var(--text);color:var(--bg);font-size:11.5px;line-height:1;padding:5px 8px;border-radius:6px;opacity:0;transform:translateY(-2px);transition:opacity .12s,transform .2s var(--spring,ease);pointer-events:none;white-space:nowrap;left:-999px}
+#hint.on{opacity:.94;transform:none}
+#hint kbd{font:inherit;font-size:10.5px;opacity:.6}
+#menu button.info{opacity:.55;cursor:default}
 #tip{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--text);color:var(--bg);font-size:12px;padding:6px 12px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:90}
 #tip.on{opacity:.92}
 /* tryb bez nawigacji (Tab, jak w Gapie): samo płótno; wąski pasek u góry zostaje na przyciski okna i przesuwanie okna */
@@ -208,6 +212,7 @@ body.bare.ontop.moving #pinMark{display:none}
 <div id="fspill"><button class="ib" id="pillTop"></button><button class="ib" id="pillUi"></button><button class="ib fsb" id="pillFs"></button></div>
 <div id="keys" role="dialog"></div>
 <div id="menu"></div>
+<div id="hint" role="tooltip"></div>
 <div id="tip"></div>
 <script src="lang/en.js"></script>
 <script src="i18n.js"></script>

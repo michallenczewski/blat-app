@@ -124,6 +124,8 @@ ipcMain.on('chrome-colors', (e, bg, fg, h) => {
 ipcMain.on('bare', (e, v) => { const w = BrowserWindow.fromWebContents(e.sender); if (isMac && w && w.setWindowButtonPosition) try { w.setWindowButtonPosition(v ? { x: 14, y: 13 } : { x: 18, y: 19 }); } catch (err) {} });
 // na Macu w trybie bez nawigacji przyciski okna pokazują się tylko przy ruchu myszy, razem z pastylką
 ipcMain.on('window-buttons', (e, v) => { const w = BrowserWindow.fromWebContents(e.sender); if (isMac && w && w.setWindowButtonVisibility) try { w.setWindowButtonVisibility(!!v); } catch (err) {} });
+// aktywowanie okna po najechaniu kursorem (opcja w ustawieniach); na Macu trzeba aktywować cały program
+ipcMain.on('focus-window', e => { const w = BrowserWindow.fromWebContents(e.sender); if (!w) return; if (isMac) app.focus({ steal: true }); w.focus(); });
 // pełny ekran 100% (bez paska zadań i paska okna): Ctrl+spacja na Windows, ⌃⌘F na Macu — jak w Gapie
 ipcMain.on('fullscreen-toggle', e => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.setFullScreen(!w.isFullScreen()); });
 

@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   windowButtons: v => ipcRenderer.send('window-buttons', v),
   fullscreenToggle: () => ipcRenderer.send('fullscreen-toggle'),
   onFullscreen: cb => ipcRenderer.on('fullscreen', (e, v) => cb(v)),
+  focusWindow: () => ipcRenderer.send('focus-window'),
   updateGet: () => ipcRenderer.invoke('update-get'),
   updateCheck: () => ipcRenderer.invoke('update-check'),
   updateInstall: () => ipcRenderer.invoke('update-install'),

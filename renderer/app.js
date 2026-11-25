@@ -796,7 +796,7 @@ function showMenu(x, y, rows) {
   const m = $('#menu'); m.innerHTML = '';
   for (const r of rows) {
     if (r === '-') { m.appendChild(document.createElement('hr')); continue; }
-    const b = document.createElement('button'); if (r[3] === 'warn' || r[2] === 'warn') b.className = 'warn';
+    const b = document.createElement('button'); if (r[3] === 'warn' || r[2] === 'warn') b.className = 'warn'; if (r[3] === 'info') { b.className = 'info'; b.disabled = true; }
     b.innerHTML = '<span></span>' + (r[2] && r[2] !== 'warn' ? '<kbd>' + r[2] + '</kbd>' : '');
     b.firstChild.textContent = r[0];
     b.onclick = () => { hideMenu(); r[1](); };
@@ -870,13 +870,61 @@ function renderKeys() {
 function toggleKeys(v) { const o = $('#keys'); v = v == null ? !keysOpen() : v; if (v) renderKeys(); o.classList.toggle('on', v); if (v) try { localStorage.setItem('blatSeenKeys', '1'); } catch (e) {} }
 function wheelTexts() { $('#zoomHint').textContent = wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'); if (keysOpen()) renderKeys(); }
 // ustawienia: na razie tylko zachowanie kółka myszy
+// ustawienia: kółko myszy, aktywowanie po najechaniu, wersja i aktualizacje
+let updState = null;
 function showSettings() {
-  const r = $('#setBtn').getBoundingClientRect();
-  showMenu(r.left, r.top - 90, [
+  const r = $('#setBtn').getBoundingClientRect(), u = updState || {};
+  const rows = [
     [_t('Kółko myszy przybliża'), () => setWheelMode('zoom'), wheelMode === 'zoom' ? '✓' : ''],
-    [_t('Kółko myszy przesuwa'), () => setWheelMode('pan'), wheelMode === 'pan' ? '✓' : '']
-  ]);
+    [_t('Kółko myszy przesuwa'), () => setWheelMode('pan'), wheelMode === 'pan' ? '✓' : ''],
+    '-',
+    [_t('Aktywuj Blat po najechaniu kursorem'), () => setHoverFocus(!hoverFocus), hoverFocus ? '✓' : ''],
+    '-',
+    ['Blat ' + (u.current || ''), () => {}, '', 'info']
+  ];
+  if (u.state === 'available' || u.state === 'downloading') rows.push([_t('Zainstaluj wersję') + ' ' + u.version, () => api.updateInstall && api.updateInstall()]);
+  else rows.push([_t('Sprawdź aktualizacje'), checkUpdates]);
+  showMenu(r.left, r.top, rows);
+  const m = $('#menu'); m.style.top = Math.max(8, r.top - m.offsetHeight - 6) + 'px';
 }
+async function checkUpdates() {
+  if (!api.updateCheck) return;
+  tip(_t('Sprawdzam aktualizacje…'));
+  const s = await api.updateCheck(); updState = { ...(updState || {}), ...s };
+  if (s.state === 'available') tip(_t('Dostępna wersja') + ' ' + s.version + ' — ' + _t('zainstalujesz ją w ustawieniach albo w bocznym pasku'));
+  else if (s.state === 'none') tip(_t('Masz najnowszą wersję') + ' (' + (s.current || '') + ')');
+  else tip(_t('Nie udało się sprawdzić aktualizacji'));
+}
+// aktywowanie po najechaniu: szczypanie gładzikiem na Macu dociera tylko do aktywnego programu
+let hoverFocus = false; try { hoverFocus = localStorage.getItem('blatHoverFocus') === '1'; } catch (e) {}
+function setHoverFocus(v) { hoverFocus = !!v; try { localStorage.setItem('blatHoverFocus', hoverFocus ? '1' : '0'); } catch (e) {} if (v) tip(_t('Blat stanie się aktywny, gdy najedziesz na niego kursorem')); }
+let hoverT = 0;
+document.addEventListener('mousemove', () => {
+  if (!hoverFocus || document.hasFocus() || !api.focusWindow || Date.now() - hoverT < 800) return;
+  hoverT = Date.now(); api.focusWindow();
+}, { passive: true });
+/* ---------- podpowiedzi przy przyciskach ---------- */
+// zamiast systemowego dymka: po ~0,5 s bez ruchu pod przyciskiem pojawia się nazwa i skrót; między sąsiednimi przyciskami od razu
+let hintT = 0, hintEl = null, hintLast = 0;
+function hintShow(el) {
+  const h = $('#hint'), t = el.dataset.tip || ''; if (!t) return;
+  const m = t.match(/^(.*?)\s*\(([^)]+)\)$/);
+  h.innerHTML = ''; const n = document.createElement('span'); n.textContent = m ? m[1] : t; h.appendChild(n);
+  if (m) { const k = document.createElement('kbd'); k.textContent = m[2]; h.appendChild(k); }
+  h.classList.add('on'); const r = el.getBoundingClientRect(), w = h.offsetWidth, hh = h.offsetHeight;
+  const below = r.bottom + 8 + hh < innerHeight;
+  h.style.left = Math.max(6, Math.min(innerWidth - w - 6, r.left + r.width / 2 - w / 2)) + 'px';
+  h.style.top = (below ? r.bottom + 6 : r.top - hh - 6) + 'px';
+}
+function hintHide() { clearTimeout(hintT); if (hintEl) hintLast = Date.now(); hintEl = null; $('#hint').classList.remove('on'); }
+document.addEventListener('pointerover', e => {
+  const el = e.target.closest && e.target.closest('.ib, #upd'); if (!el || el === hintEl) return;
+  if (el.title) { el.dataset.tip = el.title; el.removeAttribute('title'); }   // systemowy dymek nie dubluje naszego
+  hintHide(); hintEl = el;
+  hintT = setTimeout(() => { if (hintEl === el) hintShow(el); }, Date.now() - hintLast < 400 ? 0 : 450);
+});
+document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.ib, #upd'); if (el && el === hintEl && !el.contains(e.relatedTarget)) hintHide(); });
+addEventListener('pointerdown', hintHide, true); addEventListener('wheel', hintHide, { passive: true });
 let onTop = false;
 // przypięcie na wierzchu: pomarańczowy przycisk z pełną pinezką; w trybie bez nawigacji mała pinezka w rogu
 function toggleTop(v) {
@@ -922,7 +970,7 @@ function initUi() {
   if (api.onUpdateStatus) {
     const show = s => { const b = $('#upd'); b.hidden = !(s && (s.state === 'available' || s.state === 'downloading' || s.state === 'ready'));
       if (!b.hidden) b.textContent = s.state === 'available' ? _t('Nowa wersja') + ' ' + s.version : s.state === 'downloading' ? _t('Pobieram') + ' ' + (s.size ? Math.round(s.got / s.size * 100) + '%' : '') : _t('Instaluję…'); };
-    api.onUpdateStatus(show); api.updateGet().then(show);
+    api.onUpdateStatus(s => { updState = s; show(s); }); api.updateGet().then(s => { updState = s; show(s); });
     $('#upd').onclick = () => api.updateInstall();
   }
 }
@@ -1079,6 +1127,15 @@ window.blatTest = {
       const tmp = board.name; await this.open(src); await api.boardTrash(tmp); await refreshBoards();
       sel = new Set([dr.id]); this.remove(); sel.clear(); drawAll();
     }
+    // ustawienia: wersja, aktualizacje, aktywowanie po najechaniu (prośba Michała 25.11.2026)
+    { showSettings(); await new Promise(r => setTimeout(r, 50)); const t = $('#menu').innerText;
+      ok(/Blat \S+/.test(t) && t.includes(_t('Sprawdź aktualizacje')), 'ustawienia pokazują wersję i „Sprawdź aktualizacje”');
+      ok(t.includes(_t('Aktywuj Blat po najechaniu kursorem')), 'ustawienia mają aktywowanie po najechaniu'); hideMenu();
+      const r0 = typeof hoverFocus !== 'undefined' && hoverFocus; if (typeof setHoverFocus === 'function') { setHoverFocus(true); ok(localStorage.getItem('blatHoverFocus') === '1', 'aktywowanie po najechaniu zapamiętane'); setHoverFocus(r0); } }
+    // podpowiedź po zatrzymaniu kursora na narzędziu
+    { const b = $('#tools .ib[data-tool="pen"]'); b.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })); await new Promise(r => setTimeout(r, 700));
+      const h = $('#hint'); ok(h && h.classList.contains('on') && h.textContent.includes(_t('Mazak')) && !b.title, 'po zatrzymaniu kursora na narzędziu pojawia się jego opis');
+      b.dispatchEvent(new PointerEvent('pointerout', { bubbles: true })); await new Promise(r => setTimeout(r, 50)); ok(h && !h.classList.contains('on'), 'opis znika po zjechaniu z narzędzia'); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();
