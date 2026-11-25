@@ -60,7 +60,9 @@ function applyTheme() {
   $('#themeBtn').innerHTML = t === 'dark' ? IC.sun : IC.moon;
   $('#themeBtn').title = _t(t === 'dark' ? 'Tryb jasny' : 'Tryb ciemny');
   const cs = getComputedStyle(document.documentElement);
-  if (api.chromeColors) api.chromeColors(cs.getPropertyValue('--bg').trim(), cs.getPropertyValue('--text2').trim(), isBare() && !isFs() ? 36 : 52);
+  // Windows: w trybie bez nawigacji przyciski okna leżą na płótnie, więc dostają jego kolor i niższy pasek
+  const bareWin = isBare() && !isFs();
+  if (api.chromeColors) api.chromeColors(cs.getPropertyValue(bareWin ? '--paper' : '--bg').trim(), cs.getPropertyValue('--text2').trim(), bareWin ? 32 : 52);
 }
 
 /* ---------- rysowanie elementów ---------- */
@@ -753,8 +755,10 @@ window.blatTest = {
     const mw = main.getBoundingClientRect().width; this.bare(true);
     ok(getComputedStyle($('header')).display === 'none' && getComputedStyle($('aside')).display === 'none', 'tryb bez nawigacji chowa pasek i listę blatów');
     ok(main.getBoundingClientRect().width > mw && Math.abs(main.getBoundingClientRect().width - innerWidth) < 2, 'płótno w trybie bez nawigacji zajmuje całą szerokość');
-    { const de = document.documentElement, was = [...de.classList].find(c => c.startsWith('frame-')); de.classList.replace(was, 'frame-mac');
-      ok(Math.abs(main.getBoundingClientRect().top) < 1, 'na Macu w trybie bez nawigacji płótno sięga górnej krawędzi'); de.classList.replace('frame-mac', was); }
+    for (const fr of ['frame-mac', 'frame-win']) { const de = document.documentElement, was = [...de.classList].find(c => c.startsWith('frame-')); de.classList.replace(was, fr);
+      ok(Math.abs(main.getBoundingClientRect().top) < 1, (fr === 'frame-mac' ? 'na Macu' : 'na Windows') + ' w trybie bez nawigacji płótno sięga górnej krawędzi');
+      if (fr === 'frame-win') { toggleTop(true); const p = $('#pinMark').getBoundingClientRect(); ok(p.top < 30 && innerWidth - p.right >= 140, 'na Windows przypinka stoi u góry, obok przycisków okna'); toggleTop(false); }
+      de.classList.replace(fr, was); }
     this.bare(false); ok(getComputedStyle($('header')).display !== 'none' && Math.abs(main.getBoundingClientRect().width - mw) < 2, 'powrót interfejsu');
     // okno da się przesuwać: niewidoczna warstwa z no-drag nie może leżeć nad paskiem (Electron liczy obszary przeciągania bez względu na przezroczystość)
     { const hr = $('header').getBoundingClientRect(), bad = [...document.querySelectorAll('body *')].filter(el => {
