@@ -15,6 +15,10 @@
 
 Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tablic. Na Macu płótno sięga samej góry okna: przyciski okna pokazują się nad nim tylko przy ruchu myszy (`setWindowButtonVisibility`), a okno przesuwa się za niewidoczny pas 28 px przy górnej krawędzi. Na Windows zostaje pasek 36 px na systemowe przyciski okna. Pełny ekran (⌃⌘F, Ctrl+spacja) włączony z programu od razu chowa interfejs, a po wyjściu przywraca poprzedni stan. Pastylka w prawym górnym rogu pojawia się przy ruchu myszy. Widok przesuwamy o różnicę położenia płótna, żeby obrazy nie przeskakiwały.
 
+## Mazak (element „drawing”)
+
+Kreska to element typu `drawing` (nazwa wspólna z Blatem w przeglądarce): `x, y, w, h` jak inne elementy, punkty `pts` względem `(x, y)` w rozmiarze bazowym `bw × bh` (SVG z `viewBox` i `preserveAspectRatio="none"`, więc skaluje się razem z `w × h`), grubość `sw`, kolor `c` i `parent` — id obrazu, na którym kreskę narysowano (≥ 60% punktów na obrazie, licząc od wierzchu). Kreski przesuwają się, skalują (zmiana rozmiaru, porządkowanie) i usuwają razem z obrazem; przesunięta osobno kreska szuka nowego obrazu. Obszar kreski ma `pointer-events:none`, klikalny jest tylko niewidoczny, szerszy ślad `.hit`, żeby kreska nie zasłaniała obrazu. Warstwy: elementy dostają `z-index` wg (z, kolejność dodania), kreska tuż nad swoim obrazem. Ślad `.hit` ma ok. 12 px na ekranie i odświeża się po przybliżeniu; kreska przesunięta bez swojego obrazu (myszą lub strzałkami) szuka nowego (`reparent`). Uwaga: Blat starszy niż 0.2.5 nie zna `drawing` — pokaże w miejscu kreski pusty, klikalny prostokąt, a porządkowanie potraktuje kreski jak notatki. Blaty z kreskami otwieramy więc tylko w 0.2.5 i nowszych (aktualizacja przychodzi sama).
+
 ## Ikona
 
 Źródło to `projekt/logo/blat.svg` (wypchnięta kratka na #FF6B1A, wspólna rodzina z Gapą i Modo). `build/icon.png` (1024 px, kwadrat 824 px według siatki Apple), `build/icon-win.png` (1024 px, bez marginesu, tak jak w Gapie — inaczej w menu Start ikona wychodzi mniejsza od ikon Gapy i Modo) i `renderer/favicon.png` (64 px) renderujemy z niego przez `rsvg-convert`.

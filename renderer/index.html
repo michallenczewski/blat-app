@@ -98,6 +98,14 @@ main.panning{cursor:grabbing}
 main.space{cursor:grab}
 main.tool-note{cursor:text}
 main.tool-frame{cursor:crosshair}
+main.tool-pen{cursor:crosshair}
+/* kreski mazaka: obszar kreski nie zasłania obrazu, klikalna jest tylko sama kreska (szerszy, niewidoczny ślad .hit) */
+.it.drawing{pointer-events:none}
+.it.drawing svg{display:block;width:100%;height:100%;overflow:visible}
+.it.drawing .hit{stroke:transparent;pointer-events:stroke}
+.it.drawing.live{left:0;top:0;width:1px;height:1px;z-index:99999}
+main.tool-pen .it.drawing .hit{pointer-events:none}
+.it.drawing.sel{outline-offset:2px}
 #menu{position:fixed;z-index:80;min-width:200px;padding:5px;border-radius:10px;background:var(--menu);box-shadow:var(--menush);display:none}
 #menu button{display:flex;align-items:center;justify-content:space-between;gap:20px;width:100%;height:30px;padding:0 10px;border-radius:7px;color:var(--text)}
 #menu button:hover{background:var(--hover)}

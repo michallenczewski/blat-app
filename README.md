@@ -21,6 +21,7 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | Tab | Tab | tryb bez nawigacji: samo płótno, bez paska i listy blatów |
 | ⌃⌘F | Ctrl+spacja | pełny ekran (Esc wychodzi) |
 | ? | ? | ściąga ze wszystkimi skrótami |
+| M | M | mazak: rysowanie po obrazach (Shift: prosta kreska, Esc kończy) |
 
 ## Rozwój
 

@@ -42,7 +42,7 @@ ipcMain.handle('boards-list', async () => {
     try {
       const j = JSON.parse(await fsp.readFile(path.join(dir, d.name, 'board.json'), 'utf8'));
       const imgs = (j.items || []).filter(i => i.type === 'image');
-      out.push({ name, count: (j.items || []).length, thumbs: imgs.slice(0, 2).map(i => i.img && i.img.thumb).filter(Boolean), modified: j.modified || 0 });
+      out.push({ name, count: (j.items || []).filter(i => i.type !== 'drawing').length, thumbs: imgs.slice(0, 2).map(i => i.img && i.img.thumb).filter(Boolean), modified: j.modified || 0 });
     } catch (e) { out.push({ name, count: 0, thumbs: [], modified: 0 }); }
   }
   out.sort((a, b) => b.modified - a.modified);

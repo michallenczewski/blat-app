@@ -16,6 +16,7 @@ const IC = {
   select: svg('<path d="M4 2.5 12 8l-3.6.9L10.5 13l-1.6.8-2.1-4.1L4 12.5z"/>'),
   note: svg('<path d="M3 3.5h10M8 3.5v9"/>'),
   frame: svg('<rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M5 6.5h3"/>'),
+  pen: svg('<path d="M3 13l.9-3.2 7-7a1.6 1.6 0 0 1 2.3 2.3l-7 7z"/><path d="M9.6 4.1l2.3 2.3"/>'),
   // porządkowanie: dwa paski jeden pod drugim (w 15 px musi być bardzo proste)
   arrange: svg('<rect x="2.5" y="3.5" width="11" height="3.5" rx="1"/><rect x="2.5" y="9" width="11" height="3.5" rx="1"/>'),
   pin: svg('<path d="M6 2.5h4M8 2.5v5M5 7.5h6l-1 3H6zM8 10.5v3"/>'),
@@ -49,7 +50,48 @@ const byId = id => board.items.find(i => i.id === id);
 const selItems = () => board.items.filter(i => sel.has(i.id));
 const inside = (a, f) => { const cx = a.x + a.w / 2, cy = a.y + a.h / 2; return a !== f && cx > f.x && cx < f.x + f.w && cy > f.y && cy < f.y + f.h; };
 // zaznaczenie razem z zawartością zaznaczonych ramek
-function movingSet() { const m = new Set(sel); for (const id of sel) { const f = byId(id); if (f && f.type === 'frame') for (const o of board.items) if (o.type !== 'frame' && inside(o, f)) m.add(o.id); } return m; }
+function movingSet() {
+  const m = new Set(sel); for (const id of sel) { const f = byId(id); if (f && f.type === 'frame') for (const o of board.items) if (o.type !== 'frame' && inside(o, f)) m.add(o.id); }
+  for (const o of board.items) if (o.type === 'drawing' && o.parent && m.has(o.parent)) m.add(o.id);   // kreski mazaka jadą ze swoim obrazem
+  return m;
+}
+/* ---------- mazak ---------- */
+// Kreska to element „drawing”: punkty względem (x, y) w rozmiarze bazowym bw × bh, grubość sw, kolor c,
+// parent = id obrazu, na którym ją narysowano (przesuwa się, skaluje i znika razem z nim).
+const PEN = '#E5484D';
+const kidsOf = id => board.items.filter(o => o.type === 'drawing' && o.parent === id);
+function imageUnder(ptsAbs) {
+  // od wierzchu: wyższe z, a przy równym z później dodany (tak samo jak na ekranie)
+  const imgs = board.items.map((o, n) => [o, n]).filter(([o]) => o.type === 'image').sort((a, b) => ((b[0].z || 0) - (a[0].z || 0)) || (b[1] - a[1])).map(([o]) => o);
+  for (const im of imgs) { const n = ptsAbs.filter(([x, y]) => x >= im.x && x <= im.x + im.w && y >= im.y && y <= im.y + im.h).length; if (n >= ptsAbs.length * 0.6) return im.id; }
+  return null;
+}
+function penPath(pts) {
+  if (pts.length < 2) return '';
+  let d = 'M' + pts[0][0] + ' ' + pts[0][1];
+  for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; d += 'Q' + pts[i][0] + ' ' + pts[i][1] + ' ' + mx.toFixed(1) + ' ' + my.toFixed(1); }
+  const l = pts[pts.length - 1]; return d + 'L' + l[0] + ' ' + l[1];
+}
+function makeDrawing(ptsAbs, sw, c) {
+  if (ptsAbs.length < 2) return null;
+  snapshot();
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const [x, y] of ptsAbs) { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x); y2 = Math.max(y2, y); }
+  const x = x1 - sw, y = y1 - sw, w = Math.max(1, x2 - x1 + 2 * sw), h = Math.max(1, y2 - y1 + 2 * sw);
+  const pts = ptsAbs.map(([px, py]) => [Math.round((px - x) * 10) / 10, Math.round((py - y) * 10) / 10]);
+  const top = Math.max(0, ...board.items.map(i => i.z || 0));
+  const d = { id: uid(), type: 'drawing', x, y, w, h, bw: w, bh: h, pts, sw, c: c || PEN, parent: imageUnder(ptsAbs), z: top + 1 };
+  board.items.push(d); drawAll(); changed(); return d.id;
+}
+// kreski przesunięte bez swojego obrazu szukają obrazu pod sobą
+function reparent(ids) {
+  for (const id of ids) { const o = byId(id); if (o && o.type === 'drawing' && !ids.has(o.parent)) { const k = o.w / o.bw; o.parent = imageUnder(o.pts.map(([px, py]) => [o.x + px * k, o.y + py * k])); } }
+}
+// obraz zmienił miejsce lub rozmiar: jego kreski idą za nim (o = stare położenie obrazu)
+function followParent(im, o) {
+  const k = o.w ? im.w / o.w : 1;
+  for (const c of kidsOf(im.id)) { c.x = im.x + (c.x - o.x) * k; c.y = im.y + (c.y - o.y) * k; c.w *= k; c.h *= k; drawItem(c); }
+}
 const toWorld = (cx, cy) => { const r = main.getBoundingClientRect(), v = board.view; return { x: (cx - r.left - v.x) / v.z, y: (cy - r.top - v.y) / v.z }; };
 const centerWorld = () => { const r = main.getBoundingClientRect(); return toWorld(r.left + r.width / 2, r.top + r.height / 2); };
 
@@ -79,22 +121,31 @@ function drawItem(it) {
     if (it.type === 'image') { const im = document.createElement('img'); im.decoding = 'async'; im.draggable = false; el.appendChild(im); }
     if (it.type === 'frame') el.innerHTML = '<div class="fl"><b></b><span></span></div>';
     if (it.type === 'note') el.dataset.ph = _t('Notatka');
+    if (it.type === 'drawing') el.innerHTML = '<svg preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round"><path class="hit"/><path class="ln"/></svg>';
     els.set(it.id, el);
     world.appendChild(el);
   }
   el.style.left = it.x + 'px'; el.style.top = it.y + 'px'; el.style.width = it.w + 'px';
   el.style.height = it.type === 'note' ? 'auto' : it.h + 'px';
-  el.style.zIndex = (it.type === 'frame' ? 0 : 1000) + (it.z || 0);
+  // kolejność warstw: ramki na dole, potem obrazy i notatki wg (z, kolejność dodania); kreska tuż nad swoim obrazem
+  const rk = rank.get(it.type === 'drawing' ? it.parent : it.id);
+  el.style.zIndex = it.type === 'frame' ? (it.z || 0) : rk == null ? 1000 + 2 * rank.size + 2 + (it.z || 0) : 1000 + 2 * rk + (it.type === 'drawing' ? 1 : 0);
+  if (it.type === 'drawing') {
+    const s = el.firstChild, d = penPath(it.pts);
+    if (s.dataset.d !== d) { s.dataset.d = d; s.setAttribute('viewBox', '0 0 ' + it.bw + ' ' + it.bh); s.querySelector('.ln').setAttribute('d', d); s.querySelector('.hit').setAttribute('d', d); }
+    s.querySelector('.ln').setAttribute('stroke', it.c || PEN); s.querySelector('.ln').setAttribute('stroke-width', it.sw);
+    s.querySelector('.hit').setAttribute('stroke-width', Math.max(it.sw * 1.5, 12 / board.view.z * (it.bw / it.w)));   // ok. 12 px na ekranie, nie mniej niż kreska
+  }
   if (it.type === 'image') { const im = el.firstChild, s = imgSrc(it); if (im.getAttribute('src') !== s) im.src = s; }
   if (it.type === 'frame') {
     const nb = el.querySelector('.fl b'); if (nb) nb.textContent = it.name || _t('Ramka');   // podczas zmiany nazwy w miejscu <b> jest pole tekstowe
-    const n = board.items.filter(o => o.type !== 'frame' && inside(o, it)).length;
+    const n = board.items.filter(o => o.type !== 'frame' && o.type !== 'drawing' && inside(o, it)).length;
     el.querySelector('span').textContent = n ? n + ' ' + plural(n, 'element', 'elementy', 'elementów') : '';
   }
   if (it.type === 'note' && el.contentEditable !== 'true' && el.textContent !== (it.text || '')) el.textContent = it.text || '';
   el.classList.toggle('sel', sel.has(it.id));
   let hd = el.querySelector('.hd');
-  const showHd = sel.size === 1 && sel.has(it.id);
+  const showHd = sel.size === 1 && sel.has(it.id) && it.type !== 'drawing';
   if (showHd && !hd) { hd = document.createElement('span'); hd.className = 'hd br'; el.appendChild(hd); }
   if (!showHd && hd) hd.remove();
   if (hd) { const k = 1 / board.view.z; hd.style.transform = 'scale(' + k + ')'; hd.style.transformOrigin = '100% 100%'; }
@@ -106,7 +157,13 @@ function plural(n, one, few, many) {
   const d = n % 10, t = n % 100;
   return d >= 2 && d <= 4 && (t < 12 || t > 14) ? few : many;
 }
+let rank = new Map();
+function ranks() {
+  rank = new Map(board.items.map((o, n) => [o, n]).filter(([o]) => o.type !== 'frame' && o.type !== 'drawing')
+    .sort((a, b) => ((a[0].z || 0) - (b[0].z || 0)) || (a[1] - b[1])).map(([o], r) => [o.id, r]));
+}
 function drawAll() {
+  ranks();
   const ids = new Set(board.items.map(i => i.id));
   for (const [id, el] of els) if (!ids.has(id)) { el.remove(); els.delete(id); }
   for (const it of board.items) drawItem(it);
@@ -119,7 +176,7 @@ function applyView() {
   world.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.z + ')';
   $('#zoomPct').textContent = Math.round(v.z * 100) + '%';
   clearTimeout(applyView.t);
-  applyView.t = setTimeout(() => { for (const it of board.items) if (it.type === 'image' || sel.has(it.id)) drawItem(it); }, 160);   // podmiana miniatura/pełny obraz po zakończeniu przybliżania
+  applyView.t = setTimeout(() => { for (const it of board.items) if (it.type === 'image' || it.type === 'drawing' || sel.has(it.id)) drawItem(it); }, 160);   // podmiana miniatura/pełny obraz po zakończeniu przybliżania
 }
 
 /* ---------- zapis, cofanie ---------- */
@@ -317,12 +374,13 @@ function renameFrame(f) {
 /* ---------- układanie ---------- */
 // zaznaczone obrazy (albo zawartość zaznaczonej ramki) w równych rzędach, od lewego górnego rogu zaznaczenia
 function arrange() {
-  let list = selItems().filter(i => i.type !== 'frame');
+  let list = selItems().filter(i => i.type !== 'frame' && i.type !== 'drawing');
   let frame = null;
-  if (!list.length) { const f = selItems().find(i => i.type === 'frame'); if (f) { frame = f; list = board.items.filter(o => o.type !== 'frame' && inside(o, f)); } }
+  if (!list.length) { const f = selItems().find(i => i.type === 'frame'); if (f) { frame = f; list = board.items.filter(o => o.type !== 'frame' && o.type !== 'drawing' && inside(o, f)); } }
   if (list.length < 2) { const b = $('#arrangeBtn'); b.classList.remove('nie'); void b.offsetWidth; b.classList.add('nie'); tip(_t('Zaznacz co najmniej dwa obrazy')); return; }
   snapshot();
-  const moved = frame ? [...list, frame] : list, before = new Map(moved.map(i => [i.id, { x: i.x, y: i.y, w: i.w, h: i.h }]));
+  const kids = list.flatMap(i => kidsOf(i.id));
+  const moved = [...list, ...kids, ...(frame ? [frame] : [])], before = new Map(moved.map(i => [i.id, { x: i.x, y: i.y, w: i.w, h: i.h }]));
   const b = bbox(list), gap = 16;
   const imgs = list.filter(i => i.type === 'image'), notes = list.filter(i => i.type !== 'image');
   const H = imgs.length ? imgs.map(i => i.h).sort((a, c) => a - c)[Math.floor(imgs.length / 2)] : 200;
@@ -333,6 +391,7 @@ function arrange() {
   for (const i of imgs) { const w = Math.round(H * i.w / i.h); if (x > b.x && x - b.x + w > rowW) flush(); i.x = Math.round(x); i.y = Math.round(y); i.w = w; i.h = Math.round(H); x += w + gap; row.push(i); }
   if (row.length) y += H + gap;
   for (const n of notes) { n.x = b.x; n.y = Math.round(y); y += (n.h || 24) + gap; }
+  for (const i of list) if (i.type === 'image') followParent(i, before.get(i.id));
   if (frame) { const nb = bbox(list); frame.x = nb.x - 20; frame.y = nb.y - 46; frame.w = nb.w + 40; frame.h = nb.h + 66; }
   drawAll(); changed(); glide(moved, before);
   const ab = $('#arrangeBtn'); ab.classList.remove('tak', 'nie'); void ab.offsetWidth; ab.classList.add('tak');
@@ -386,9 +445,16 @@ main.addEventListener('pointerdown', e => {
     drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, vx: board.view.x, vy: board.view.y }; main.classList.add('panning');
   } else if (e.button !== 0) return;
   else if (tool === 'note') { addNote(w); setTool('select'); return; }
+  else if (tool === 'pen') {
+    const live = document.createElement('div'); live.className = 'it drawing live';
+    live.innerHTML = '<svg fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="' + PEN + '" stroke-width="' + (3 / board.view.z) + '"/></svg>';
+    world.appendChild(live); sel.clear(); drawAll();
+    drag = { kind: 'pen', pts: [[w.x, w.y]], sw: 3 / board.view.z, live };
+  }
   else if (tool === 'frame') { snapshot(); const f = { id: uid(), type: 'frame', x: w.x, y: w.y, w: 1, h: 1, name: _t('Ramka'), z: 0 }; board.items.push(f); sel = new Set([f.id]); drawAll(); drag = { kind: 'newframe', f, ox: w.x, oy: w.y }; }
   else if (e.target.classList.contains('hd') && item) {
-    snapshot(); drag = { kind: 'resize', item, ox: w.x, oy: w.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0 };
+    snapshot(); drag = { kind: 'resize', item, ox: w.x, oy: w.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0,
+      kids: kidsOf(item.id).map(c => [c, c.x, c.y, c.w, c.h]) };
   } else if (item) {
     if (e.shiftKey || e.metaKey || e.ctrlKey) { sel.has(item.id) ? sel.delete(item.id) : sel.add(item.id); }
     else if (!sel.has(item.id)) sel = new Set([item.id]);
@@ -408,6 +474,15 @@ main.addEventListener('pointermove', e => {
   if (!(e.buttons & 7)) { endDrag(); return; }
   const w = toWorld(e.clientX, e.clientY);
   if (drag.kind === 'pan') { board.view.x = drag.vx + e.clientX - drag.sx; board.view.y = drag.vy + e.clientY - drag.sy; applyView(); }
+  else if (drag.kind === 'pen') {
+    const p = drag.pts, r2 = v => Math.round(v * 10) / 10;
+    if (e.shiftKey) drag.pts = [p[0], [r2(w.x), r2(w.y)]];
+    else for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) {
+      const q = toWorld(ev.clientX, ev.clientY), l = p[p.length - 1];
+      if (Math.hypot(q.x - l[0], q.y - l[1]) * board.view.z >= 1.5) p.push([r2(q.x), r2(q.y)]);
+    }
+    drag.live.querySelector('path').setAttribute('d', penPath(drag.pts));
+  }
   else if (drag.kind === 'move') {
     const dx = w.x - drag.ox, dy = w.y - drag.oy;
     if (!drag.moved && Math.hypot(dx, dy) * board.view.z < 3) return;
@@ -417,6 +492,7 @@ main.addEventListener('pointermove', e => {
     const it = drag.item; let nw = Math.max(24, drag.w0 + w.x - drag.ox), nh = Math.max(24, drag.h0 + w.y - drag.oy);
     if (drag.ratio) nh = nw / drag.ratio;
     it.w = Math.round(nw); if (it.type !== 'note') it.h = Math.round(nh); drawItem(it);
+    const k = it.w / drag.w0; for (const [c, x, y, cw, ch] of drag.kids) { c.x = it.x + (x - it.x) * k; c.y = it.y + (y - it.y) * k; c.w = cw * k; c.h = ch * k; drawItem(c); }
   } else if (drag.kind === 'newframe') {
     const f = drag.f; f.x = Math.min(drag.ox, w.x); f.y = Math.min(drag.oy, w.y); f.w = Math.abs(w.x - drag.ox); f.h = Math.abs(w.y - drag.oy); drawItem(f);
   } else if (drag.kind === 'marq') {
@@ -434,7 +510,15 @@ function endDrag() {
   const d = drag; drag = null;
   main.classList.remove('panning'); $('#marq').style.display = 'none';
   if (d.kind === 'pan') changedView();
-  if (d.kind === 'move' && d.moved) { changed(); frameCounts(); }
+  if (d.kind === 'pen') {
+    d.live.remove();
+    const len = d.pts.reduce((s, p, i) => i ? s + Math.hypot(p[0] - d.pts[i - 1][0], p[1] - d.pts[i - 1][1]) : 0, 0);
+    if (len * board.view.z >= 3) makeDrawing(d.pts, d.sw);
+  }
+  if (d.kind === 'move' && d.moved) {
+    reparent(new Set(d.start.map(([o]) => o.id)));
+    changed(); frameCounts();
+  }
   if (d.kind === 'resize') { changed(); drawItem(d.item); }
   if (d.kind === 'newframe') {
     if (d.f.w < 20 || d.f.h < 20) { board.items = board.items.filter(i => i !== d.f); sel.clear(); undoStack.pop(); }
@@ -508,7 +592,7 @@ function reorder(d) {
 function removeSel() {
   if (!sel.size) return;
   snapshot();
-  board.items = board.items.filter(i => !sel.has(i.id)); sel.clear(); drawAll(); changed();
+  board.items = board.items.filter(i => !sel.has(i.id) && !(i.type === 'drawing' && sel.has(i.parent))); sel.clear(); drawAll(); changed();
 }
 
 /* ---------- przeciąganie i schowek ---------- */
@@ -554,6 +638,7 @@ main.addEventListener('pointermove', e => { lastPointer = { x: e.clientX, y: e.c
 
 /* ---------- klawiatura ---------- */
 function setTool(t) {
+  if (t === 'pen' && tool !== 'pen') tip(_t('Mazak: rysuj po obrazach · Shift prosta kreska · Esc kończy'));
   tool = t;
   for (const b of document.querySelectorAll('#tools .ib')) b.classList.toggle('on', b.dataset.tool === t);
   const on = $('#tools .ib.on'), ind = $('#tools .ind'); if (on && ind) ind.style.transform = 'translateX(' + on.offsetLeft + 'px)';
@@ -581,6 +666,7 @@ addEventListener('keydown', e => {
   else if (k === 'v') setTool('select');
   else if (k === 't') setTool('note');
   else if (k === 'f') setTool('frame');
+  else if (k === 'm') setTool('pen');
   else if (k === 'a') arrange();
   else if (k === 'p') toggleTop();
   else if (k === '0') fit();
@@ -590,7 +676,7 @@ addEventListener('keydown', e => {
   else if (k.startsWith('arrow') && sel.size) {
     e.preventDefault(); snapshot();
     const s = e.shiftKey ? 50 : 5, dx = k === 'arrowleft' ? -s : k === 'arrowright' ? s : 0, dy = k === 'arrowup' ? -s : k === 'arrowdown' ? s : 0;
-    for (const id of movingSet()) { const o = byId(id); o.x += dx; o.y += dy; drawItem(o); } changed();
+    const ms = movingSet(); for (const id of ms) { const o = byId(id); o.x += dx; o.y += dy; drawItem(o); } reparent(ms); changed();
   }
 });
 addEventListener('keyup', e => { if (e.key === ' ') { spaceDown = false; main.classList.remove('space'); } });
@@ -668,7 +754,7 @@ function renderKeys() {
     + row(0, [K('1', _t('100%')), K('0', _t('całość'))])
     + row(20, [K('T', _t('notatka')), K('P', _t('zawsze na wierzchu'))])
     + row(34, [K('A', _t('ułóż zaznaczone')), K('F', _t('ramka'))])
-    + row(54, [K('Z', _t('dopasuj zaznaczone')), K('V', _t('zaznaczanie') + '<em>Esc ' + _t('odznacz') + '</em>')])
+    + row(54, [K('Z', _t('dopasuj zaznaczone')), K('V', _t('zaznaczanie') + '<em>Esc ' + _t('odznacz') + '</em>'), K('M', _t('mazak') + '<em>⇧ ' + _t('prosta kreska') + '</em>')])
     + row(0, [K('Tab', _t('ukryj interfejs'), 'w'), K(_t('spacja'), _t('przytrzymaj i przeciągnij: przesuwanie płótna'), 'sp')])
     + '<div class="km">' + L.map(([k, t]) => '<div><kbd>' + k + '</kbd>' + t + '</div>').join('') + '</div></div>';
 }
@@ -710,7 +796,7 @@ function initUi() {
   $('#bname').ondblclick = renameStart; $('#bname').title = _t('Dwuklik zmienia nazwę');
   $('#where').onclick = () => api.boardReveal();
   wheelTexts();
-  const tools = [['select', IC.select, 'Zaznaczanie', 'V'], ['note', IC.note, 'Notatka', 'T'], ['frame', IC.frame, 'Ramka', 'F']];
+  const tools = [['select', IC.select, 'Zaznaczanie', 'V'], ['note', IC.note, 'Notatka', 'T'], ['frame', IC.frame, 'Ramka', 'F'], ['pen', IC.pen, 'Mazak', 'M']];
   $('#tools').innerHTML = '<div class="ind"></div>' + tools.map(([t, ic, n, k]) => '<button class="ib" data-tool="' + t + '" title="' + _t(n) + ' (' + k + ')">' + ic + '</button>').join('');
   for (const b of document.querySelectorAll('#tools .ib')) b.onclick = () => setTool(b.dataset.tool);
   // pastylka w trybie bez nawigacji: pojawia się przy ruchu myszy, znika po dwóch sekundach
@@ -747,9 +833,10 @@ window.blatTest = {
     return (await addImages(out)).map(i => i.id);
   },
   note: (x, y, text) => addNote({ x, y }, text).id,
+  stroke: (pts, sw) => makeDrawing(pts, sw || 3 / board.view.z),
   select: ids => { sel = new Set(ids); drawAll(); },
   selectAll: () => { sel = new Set(board.items.map(i => i.id)); drawAll(); },
-  move: (dx, dy) => { snapshot(); for (const o of [...movingSet()].map(byId)) { o.x += dx; o.y += dy; } drawAll(); changed(); },
+  move: (dx, dy) => { snapshot(); const ms = movingSet(); for (const o of [...ms].map(byId)) { o.x += dx; o.y += dy; } reparent(ms); drawAll(); changed(); },
   frame: name => { frameAround(selItems()); const f = selItems()[0]; const inp = f && els.get(f.id).querySelector('input'); if (inp) { if (name) inp.value = name; inp.blur(); } return f && f.id; },
   bare: v => { toggleBare(v); return isBare(); },
   keys: v => { toggleKeys(v); return keysOpen(); },
@@ -818,6 +905,32 @@ window.blatTest = {
         ok(el.style.transition.includes('transform') || el.style.transform !== '', 'uporządkowane obrazy przejeżdżają na nowe miejsca');
         ok($('#arrangeBtn').classList.contains('tak'), 'przycisk porządkowania reaguje na udane porządkowanie'); undo(); sel.clear(); }
       else ok(false, 'za mało obrazów do sprawdzenia porządkowania'); }
+    // mazak: wykreślanie uwag na obrazach (prośba Michała 25.11.2026)
+    { const im = board.items.find(i => i.type === 'image');
+      if (!im || typeof this.stroke !== 'function') ok(false, 'mazak: jest polecenie blatTest.stroke');
+      else {
+        im.z = Math.max(0, ...board.items.map(i => i.z || 0)) + 1; drawAll();
+        const n0 = board.items.length, d = byId(this.stroke([[im.x + 20, im.y + 20], [im.x + im.w / 2, im.y + 30], [im.x + im.w - 20, im.y + 40]]));
+        ok(d && d.type === 'drawing' && board.items.length === n0 + 1 && d.pts.length >= 2, 'mazak tworzy element „drawing” z punktami');
+        ok(d && d.parent === im.id, 'kreska na obrazie przyczepia się do obrazu na wierzchu');
+        const x0 = d.x; sel = new Set([im.id]); this.move(100, 0); ok(Math.abs(byId(d.id).x - (x0 + 100)) < 1, 'kreska przesuwa się razem z obrazem');
+        const el = els.get(d.id); ok(getComputedStyle(el).pointerEvents === 'none', 'obszar kreski nie zasłania obrazu pod spodem');
+        { const other = board.items.find(i => i.type === 'image' && i !== im); if (other) { other.z = im.z + 1; drawAll();
+            ok(+els.get(d.id).style.zIndex > +els.get(im.id).style.zIndex && +els.get(d.id).style.zIndex < +els.get(other.id).style.zIndex, 'kreska leży tuż nad swoim obrazem, pod obrazami na wierzchu'); other.z = 0; drawAll(); } }
+        sel = new Set([im.id]); this.remove(); ok(!byId(d.id), 'usunięcie obrazu usuwa jego kreski'); this.undo();
+        ok(byId(d.id) && byId(im.id), 'cofnięcie przywraca obraz z kreską');
+        const f = board.items.find(i => i.type === 'frame'); if (f) { drawItem(f); const n = board.items.filter(o => o.type !== 'frame' && o.type !== 'drawing' && inside(o, f)).length;
+          ok(els.get(f.id).querySelector('span').textContent.startsWith(n ? String(n) : ''), 'ramka nie liczy kresek jako elementów'); }
+        // ślad kreski (do klikania) ma stałą szerokość na ekranie także po przybliżeniu
+        { const z0 = board.view.z, hw = () => +els.get(d.id).querySelector('.hit').getAttribute('stroke-width') * board.view.z * (d.w / d.bw);
+          zoomAt(4); await new Promise(r => setTimeout(r, 250)); const h4 = hw(); zoomAt(z0 / board.view.z); await new Promise(r => setTimeout(r, 250));
+          ok(h4 < 40, 'ślad kreski po przybliżeniu nie rośnie (' + Math.round(h4) + ' px)'); }
+        // kreska zjechana strzałkami z obrazu odczepia się od niego
+        { sel = new Set([d.id]); for (let i = 0; i < 60; i++) dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true }));
+          ok(byId(d.id).parent !== im.id, 'kreska przesunięta strzałkami z obrazu odczepia się od niego'); this.undo(); sel.clear(); }
+        ok(!els.get(d.id).querySelector('.hd') || (sel = new Set([d.id]), drawAll(), !els.get(d.id).querySelector('.hd')), 'sama kreska nie ma uchwytu zmiany rozmiaru'); sel.clear(); drawAll();
+        sel = new Set([d.id]); this.remove(); sel.clear(); drawAll();
+      } }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();
