@@ -805,6 +805,12 @@ window.blatTest = {
     // animacje „sprężyna” i reakcja porządkowania (prośba Michała 25.11.2026)
     { setTool('note'); const ind = $('#tools .ind'), on = $('#tools .ib[data-tool="note"]');
       ok(ind && Math.abs(ind.getBoundingClientRect().left - on.getBoundingClientRect().left) < 40 && ind.style.transform.includes('translate'), 'wskaźnik narzędzi przesuwa się pod wybrane narzędzie'); setTool('select');
+      // wybrane narzędzie widać w obu motywach: wskaźnik wyraźnie jaśniejszy od tła grupy narzędzi
+      const lum = c => { const m = c.match(/\d+/g).map(Number); return .2126 * m[0] + .7152 * m[1] + .0722 * m[2]; }, th = document.documentElement.dataset.theme;
+      for (const t of ['light', 'dark']) { document.documentElement.dataset.theme = t;
+        const d = lum(getComputedStyle(ind).backgroundColor) - lum(getComputedStyle($('#tools')).backgroundColor);
+        ok(d >= 12, 'wybrane narzędzie widać w motywie ' + (t === 'dark' ? 'ciemnym' : 'jasnym') + ' (różnica jasności ' + Math.round(d) + ')'); }
+      document.documentElement.dataset.theme = th;
       sel.clear(); arrange(); ok($('#arrangeBtn').classList.contains('nie'), 'porządkowanie bez zaznaczenia potrząsa przyciskiem');
       const imgs = board.items.filter(i => i.type === 'image').slice(0, 3);
       if (imgs.length >= 2) { imgs[0].x += 500; drawAll(); sel = new Set(imgs.map(i => i.id)); arrange(); const el = els.get(imgs[0].id);
