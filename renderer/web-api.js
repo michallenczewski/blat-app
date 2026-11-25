@@ -16,6 +16,7 @@ if (!window.api) (() => {
     boardReveal() {},
     async imagePut(n, f, bytes) { files.set(n + '/' + f, URL.createObjectURL(new Blob([bytes], { type: /\.png$/.test(f) ? 'image/png' : /\.jpe?g$/.test(f) ? 'image/jpeg' : 'image/webp' }))); return true; },
     async imagesPrune() { return 0; },
+    async imageCopy(a, b, f) { const u = files.get(a + '/' + f); if (u) files.set(b + '/' + f, u); return !!u; },
     imageUrl: (n, f) => files.get(n + '/' + f) || '',
     filePath: () => '', fileRead: async () => { throw new Error('brak w przeglądarce'); },
     setOnTop() {}, setSide() {}, uiState: async () => ({ side: true, onTop: false }),

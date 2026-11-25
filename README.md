@@ -23,6 +23,8 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | ? | ? | ściąga ze wszystkimi skrótami |
 | M | M | mazak: rysowanie po obrazach (Shift: prosta kreska, Esc kończy) |
 | E | E | gumka do kresek mazaka (usuwa całe kreski) |
+| ⌘C / ⌘X / ⌘V | Ctrl+C / Ctrl+X / Ctrl+V | kopiuj, wytnij, wklej elementy (także na inny blat) |
+| ⌘D | Ctrl+D | powiel zaznaczone |
 
 ## Rozwój
 

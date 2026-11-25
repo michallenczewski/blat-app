@@ -89,6 +89,13 @@ ipcMain.handle('image-put', async (e, name, file, bytes) => {
   await fsp.writeFile(f, Buffer.from(bytes));
   return true;
 });
+// kopiowanie pliku obrazu między blatami (wklejanie elementów skopiowanych z innego blatu)
+ipcMain.handle('image-copy', async (e, from, to, file) => {
+  const f = file.replace(/[^a-z0-9._-]/gi, ''), src = path.join(boardPath(from), 'img', f), dst = path.join(boardPath(to), 'img', f);
+  await fsp.mkdir(path.dirname(dst), { recursive: true });
+  try { await fsp.copyFile(src, dst, fs.constants.COPYFILE_EXCL); } catch (err) { if (err.code !== 'EEXIST') return false; }
+  return true;
+});
 // usuwanie nieużywanych obrazów (po usunięciu elementów) — przy zamykaniu tablicy
 ipcMain.handle('images-prune', async (e, name, keep) => {
   const dir = path.join(boardPath(name), 'img'), k = new Set(keep);

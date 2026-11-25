@@ -313,7 +313,7 @@ async function trashBoard(name) {
   if (!board || board.name === name) { if (r.boards[0]) openBoard(r.boards[0].name); else newBoard(); }
 }
 function pruneImages(b) {
-  const keep = []; for (const i of b.items) if (i.img) { if (i.img.full) keep.push(i.img.full); if (i.img.thumb) keep.push(i.img.thumb); }
+  const keep = []; for (const i of [...b.items, ...(clip && clip.board === b.name ? clip.items : [])]) if (i.img) { if (i.img.full) keep.push(i.img.full); if (i.img.thumb) keep.push(i.img.thumb); }   // wycięte obrazy czekają w schowku
   api.imagesPrune(b.name, keep);
 }
 function renameStart() {
@@ -683,13 +683,54 @@ main.addEventListener('drop', async e => {
 document.addEventListener('paste', async e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable)) return;
   e.preventDefault();
-  const p = lastPointer ? toWorld(lastPointer.x, lastPointer.y) : centerWorld();
+  const p = pastePoint();
   const files = [...(e.clipboardData.files || [])];
+  if (!files.length && clip && e.clipboardData.getData('text/plain') === clip.text) { pasteClip(p); return; }
   if (files.length) { addImages(await filesToBlobs(files), p); return; }
   const text = e.clipboardData.getData('text/plain');
   if (text) addNote(p, text);
 });
+/* ---------- kopiowanie elementów ---------- */
+// clip: kopia elementów (z ramką i jej zawartością, z kreskami obrazów), blat źródłowy i tekst zapisany w schowku systemowym,
+// po którym przy wklejaniu poznajemy, że w schowku jest nasza kopia, a nie coś z innego programu
+let clip = null;
+function copySel() {
+  if (!sel.size) return null;
+  const items = [...movingSet()].map(byId).filter(Boolean).map(o => JSON.parse(JSON.stringify(o)));
+  const notes = items.filter(i => i.type === 'note' && i.text).map(i => i.text);
+  const n = items.filter(i => i.type !== 'drawing').length;
+  clip = { board: board.name, items, text: notes.length ? notes.join('\n\n') : 'Blat: ' + n + ' ' + plural(n, 'element', 'elementy', 'elementów') };
+  return clip.text;
+}
+async function pasteClip(at, offset) {
+  if (!clip || !clip.items.length) return false;
+  const items = clip.items.map(o => JSON.parse(JSON.stringify(o)));
+  // obrazy z innego blatu: kopiujemy ich pliki do bieżącego
+  if (clip.board !== board.name) for (const o of items) if (o.img) for (const f of [o.img.full, o.img.thumb]) if (f) await api.imageCopy(clip.board, board.name, f);
+  snapshot();
+  const map = new Map(items.map(o => [o.id, uid()])), b = bbox(items.filter(o => o.type !== 'drawing').length ? items.filter(o => o.type !== 'drawing') : items);
+  const dx = offset ? offset : at.x - (b.x + b.w / 2), dy = offset ? offset : at.y - (b.y + b.h / 2);
+  let top = Math.max(0, ...board.items.map(i => i.z || 0));
+  for (const o of items.sort((a, c) => (a.z || 0) - (c.z || 0))) {
+    o.id = map.get(o.id); o.x = Math.round(o.x + dx); o.y = Math.round(o.y + dy); if (o.type !== 'frame') o.z = ++top;
+    if (o.type === 'drawing') o.parent = map.get(o.parent) || null;
+    board.items.push(o);
+  }
+  reparent(new Set(items.filter(o => o.type === 'drawing' && !o.parent).map(o => o.id)));
+  sel = new Set(items.map(o => o.id)); drawAll(); changed(); return true;
+}
+const pastePoint = () => lastPointer && document.elementFromPoint(lastPointer.x, lastPointer.y)?.closest('main') ? toWorld(lastPointer.x, lastPointer.y) : centerWorld();
+function duplicateSel() { if (!sel.size) return; const keep = clip; copySel(); pasteClip(null, Math.round(24 / board.view.z)); clip = keep || clip; }
+document.addEventListener('copy', e => {
+  if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) return;
+  e.preventDefault(); e.clipboardData.setData('text/plain', copySel());
+});
+document.addEventListener('cut', e => {
+  if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) return;
+  e.preventDefault(); e.clipboardData.setData('text/plain', copySel()); removeSel();
+});
 async function pasteFromClipboard(p) {
+  try { if (clip && (await navigator.clipboard.readText()) === clip.text) { pasteClip(p); return; } } catch (e) {}
   try {
     for (const ci of await navigator.clipboard.read()) {
       const t = ci.types.find(x => x.startsWith('image/'));
@@ -722,6 +763,7 @@ addEventListener('keydown', e => {
   if (mod && k === 'y') { e.preventDefault(); undo(true); return; }
   if (mod && k === 'a') { e.preventDefault(); sel = new Set(board.items.map(i => i.id)); drawAll(); return; }
   if (mod && k === 'g') { e.preventDefault(); frameAround(selItems()); return; }
+  if (mod && k === 'd') { e.preventDefault(); duplicateSel(); return; }
   if (mod && k === 'n') { e.preventDefault(); newBoard(); return; }
   if (mod && (k === '=' || k === '+')) { e.preventDefault(); zoomAt(1.25); return; }
   if (mod && k === '-') { e.preventDefault(); zoomAt(0.8); return; }
@@ -903,6 +945,7 @@ window.blatTest = {
   note: (x, y, text) => addNote({ x, y }, text).id,
   stroke: (pts, sw) => makeDrawing(pts, sw || penPx(penSt.c, penSt.w) / board.view.z, PENS[penSt.c][0], !!PENS[penSt.c][2]),
   pen: o => { if (o) setPen(o); return { ...penSt }; },
+  copy: () => copySel(), cut: () => { const t = copySel(); removeSel(); return t; }, paste: () => pasteClip(centerWorld()), duplicate: () => duplicateSel(),
   eraseAt: (x, y) => eraseAt(x, y),
   select: ids => { sel = new Set(ids); drawAll(); },
   selectAll: () => { sel = new Set(board.items.map(i => i.id)); drawAll(); },
@@ -1015,6 +1058,27 @@ window.blatTest = {
           for (const o of board.items.filter(i => i.type === 'drawing')) sel.add(o.id); this.remove(); sel.clear(); this.pen(p0); drawAll();
         }
       } }
+    // kopiowanie, wycinanie, wklejanie i powielanie (prośba Michała 25.11.2026)
+    if (typeof this.copy !== 'function') ok(false, 'kopiowanie: są polecenia blatTest.copy / paste / duplicate');
+    else {
+      const im = board.items.find(i => i.type === 'image'), dr = byId(this.stroke([[im.x + 20, im.y + 20], [im.x + 120, im.y + 24]]));
+      const n0 = board.items.length; sel = new Set([im.id]); this.copy(); await this.paste();
+      const pIm = board.items.filter(i => i.type === 'image').slice(-1)[0], pDr = board.items.filter(i => i.type === 'drawing').find(d => d.parent === pIm.id);
+      ok(board.items.length === n0 + 2 && pIm.id !== im.id && pIm.img.full === im.img.full && pDr, 'wklejony obraz ma nowe id, ten sam plik i swoją kopię kreski');
+      ok([...sel].length === 2 && sel.has(pIm.id), 'wklejone elementy są zaznaczone');
+      this.undo(); ok(board.items.length === n0, 'cofnięcie wklejenia');
+      sel = new Set([im.id]); this.duplicate(); const dIm = board.items.filter(i => i.type === 'image').slice(-1)[0];
+      ok(dIm.id !== im.id && Math.abs(dIm.x - im.x) > 0 && board.items.length === n0 + 2, 'powielanie robi kopię obok');
+      this.undo();
+      const cut = board.items.find(i => i.type === 'note') || byId(this.note(im.x, im.y - 80, 'do wycięcia')); const nb = board.items.length;
+      sel = new Set([cut.id]); this.cut(); ok(!byId(cut.id) && board.items.length === nb - 1, 'wycinanie usuwa element');
+      await this.paste(); ok(board.items.length === nb && board.items.some(i => i.type === 'note' && i.text === cut.text), 'wklejenie wyciętej notatki');
+      // na inny blat: pliki obrazów jadą razem z nim
+      const src = board.name; sel = new Set([im.id]); this.copy(); await this.newBoard('Wklejanie ' + Date.now()); await this.paste();
+      const ni = board.items.find(i => i.type === 'image'); ok(ni && api.imageUrl(board.name, ni.img.full), 'obraz wklejony na inny blat ma swój plik w nowym blacie');
+      const tmp = board.name; await this.open(src); await api.boardTrash(tmp); await refreshBoards();
+      sel = new Set([dr.id]); this.remove(); sel.clear(); drawAll();
+    }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   boardTrash: n => ipcRenderer.invoke('board-trash', n),
   boardReveal: n => ipcRenderer.invoke('board-reveal', n),
   imagePut: (n, file, bytes) => ipcRenderer.invoke('image-put', n, file, bytes),
+  imageCopy: (from, to, file) => ipcRenderer.invoke('image-copy', from, to, file),
   imagesPrune: (n, keep) => ipcRenderer.invoke('images-prune', n, keep),
   imageUrl: (n, file) => 'blat://b/' + encodeURIComponent(n) + '/' + encodeURIComponent(file),
   filePath: f => { try { return webUtils.getPathForFile(f); } catch (e) { return ''; } },
