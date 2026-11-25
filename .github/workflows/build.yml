@@ -50,7 +50,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+      # z package-lock.json: npm ci (dokładnie te same wersje co ostatnio); bez niego: npm install
+      - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+        shell: bash
       # na maszynach GitHuba XProtect potrafi trzymać obraz dysku i hdiutil nie może go odłączyć
       - name: Zatrzymaj XProtect
         if: runner.os == 'macOS'
