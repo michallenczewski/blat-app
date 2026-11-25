@@ -35,7 +35,9 @@ header button,header input,header .title b{-webkit-app-region:no-drag}
 .tools .ind{position:absolute;top:2px;left:0;width:30px;height:28px;border-radius:7px;background:var(--toolon);box-shadow:0 0 0 1px var(--cardline),0 1px 2px rgba(0,0,0,.06);transition:transform .42s var(--spring);pointer-events:none}
 .tools .ib{position:relative;z-index:1}
 .tools .ib.on,.tools .ib:hover{background:transparent;color:var(--text)}
+.ib{transition:background-color .15s,color .15s}
 .ib svg{transition:transform .35s var(--spring)}
+.ib:hover svg{transform:translateY(-1px)}
 .ib:active svg{transform:scale(.86)}
 .ib.nie{animation:nie .38s ease-out}
 /* udane porządkowanie: tło przycisku błyska, kafelki ikony rozsypują się i wskakują na miejsca */
@@ -44,8 +46,8 @@ header button,header input,header .title b{-webkit-app-region:no-drag}
 .ib.tak rect{transform-box:fill-box;transform-origin:center;animation:.5s var(--spring) both}
 .ib.tak rect:nth-of-type(1){animation-name:k1}.ib.tak rect:nth-of-type(2){animation-name:k2;animation-delay:.03s}
 .ib.tak rect:nth-of-type(3){animation-name:k3;animation-delay:.06s}.ib.tak rect:nth-of-type(4){animation-name:k4;animation-delay:.09s}
-@keyframes k1{from{transform:translate(1.5px,2px) rotate(-18deg) scale(.7)}}
-@keyframes k2{from{transform:translate(-2px,2.5px) rotate(14deg) scale(.7)}}
+@keyframes k1{from{transform:translate(-2.5px,1.5px) rotate(-10deg) scaleX(.55)}}
+@keyframes k2{from{transform:translate(2.5px,-1.5px) rotate(8deg) scaleX(.55)}}
 @keyframes k3{from{transform:translate(2px,-2px) rotate(16deg) scale(.7)}}
 @keyframes k4{from{transform:translate(-1.5px,-2.5px) rotate(-12deg) scale(.7)}}
 @keyframes nie{20%{transform:translateX(-3px)}45%{transform:translateX(3px)}70%{transform:translateX(-2px)}100%{transform:none}}

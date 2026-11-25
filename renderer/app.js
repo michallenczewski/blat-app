@@ -16,7 +16,8 @@ const IC = {
   select: svg('<path d="M4 2.5 12 8l-3.6.9L10.5 13l-1.6.8-2.1-4.1L4 12.5z"/>'),
   note: svg('<path d="M3 3.5h10M8 3.5v9"/>'),
   frame: svg('<rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M5 6.5h3"/>'),
-  arrange: svg('<rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="8.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="2.5" y="8.5" width="5" height="5" rx="1"/><rect x="8.5" y="7" width="5" height="6.5" rx="1"/>'),
+  // porządkowanie: dwa paski jeden pod drugim (w 15 px musi być bardzo proste)
+  arrange: svg('<rect x="2.5" y="3.5" width="11" height="3.5" rx="1"/><rect x="2.5" y="9" width="11" height="3.5" rx="1"/>'),
   pin: svg('<path d="M6 2.5h4M8 2.5v5M5 7.5h6l-1 3H6zM8 10.5v3"/>'),
   // przypięta: pełna główka pinezki
   pinOn: svg('<path d="M6 2.5h4v5H6zM5 7.5h6l-1 3H6z" fill="currentColor"/><path d="M8 10.5v3"/>'),
