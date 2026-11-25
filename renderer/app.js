@@ -334,6 +334,7 @@ function arrange() {
   for (const n of notes) { n.x = b.x; n.y = Math.round(y); y += (n.h || 24) + gap; }
   if (frame) { const nb = bbox(list); frame.x = nb.x - 20; frame.y = nb.y - 46; frame.w = nb.w + 40; frame.h = nb.h + 66; }
   drawAll(); changed(); glide(moved, before);
+  const ab = $('#arrangeBtn'); ab.classList.remove('tak', 'nie'); void ab.offsetWidth; ab.classList.add('tak');
 }
 // obrazy przejeżdżają ze starych miejsc na nowe (FLIP, sama transformacja — płynnie także przy setkach obrazów)
 function glide(items, before) {
@@ -807,7 +808,8 @@ window.blatTest = {
       sel.clear(); arrange(); ok($('#arrangeBtn').classList.contains('nie'), 'porządkowanie bez zaznaczenia potrząsa przyciskiem');
       const imgs = board.items.filter(i => i.type === 'image').slice(0, 3);
       if (imgs.length >= 2) { imgs[0].x += 500; drawAll(); sel = new Set(imgs.map(i => i.id)); arrange(); const el = els.get(imgs[0].id);
-        ok(el.style.transition.includes('transform') || el.style.transform !== '', 'uporządkowane obrazy przejeżdżają na nowe miejsca'); undo(); sel.clear(); }
+        ok(el.style.transition.includes('transform') || el.style.transform !== '', 'uporządkowane obrazy przejeżdżają na nowe miejsca');
+        ok($('#arrangeBtn').classList.contains('tak'), 'przycisk porządkowania reaguje na udane porządkowanie'); undo(); sel.clear(); }
       else ok(false, 'za mało obrazów do sprawdzenia porządkowania'); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
