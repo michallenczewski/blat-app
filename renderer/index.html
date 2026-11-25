@@ -29,8 +29,16 @@ header button,header input,header .title b{-webkit-app-region:no-drag}
 .title input{font:inherit;font-weight:500;color:var(--text);background:var(--card);border:0;outline:0;box-shadow:0 0 0 1.5px var(--text);border-radius:6px;padding:3px 6px;margin:0 -6px;width:260px}
 .saved{color:var(--muted);font-size:11.5px;margin-left:10px;white-space:nowrap}
 .gap{flex:1}
-.tools{display:flex;gap:2px;padding:2px;border-radius:9px;background:var(--soft)}
-.tools .ib.on{background:var(--card);box-shadow:0 0 0 1px var(--cardline),0 1px 2px rgba(0,0,0,.06)}
+.tools{position:relative;display:flex;gap:2px;padding:2px;border-radius:9px;background:var(--soft)}
+/* animacje „sprężyna”: jedna krzywa z lekkim odbiciem dla wskaźnika narzędzi, przypinki i porządkowania */
+:root{--spring:cubic-bezier(.34,1.56,.64,1)}
+.tools .ind{position:absolute;top:2px;left:0;width:30px;height:28px;border-radius:7px;background:var(--card);box-shadow:0 0 0 1px var(--cardline),0 1px 2px rgba(0,0,0,.06);transition:transform .42s var(--spring);pointer-events:none}
+.tools .ib{position:relative;z-index:1}
+.tools .ib.on,.tools .ib:hover{background:transparent;color:var(--text)}
+.ib svg{transition:transform .35s var(--spring)}
+.ib:active svg{transform:scale(.86)}
+.ib.nie{animation:nie .38s ease-out}
+@keyframes nie{20%{transform:translateX(-3px)}45%{transform:translateX(3px)}70%{transform:translateX(-2px)}100%{transform:none}}
 .sep{width:1px;height:16px;background:var(--line);margin:0 6px;flex:none}
 aside{grid-row:2;overflow:hidden;padding:6px 10px 12px 12px;display:flex;flex-direction:column;min-width:0}
 .noside aside{visibility:hidden}
@@ -127,7 +135,13 @@ body.bare #fspill{-webkit-app-region:no-drag}
 @media (max-width:420px){.title .saved,#zoomHint{display:none}}
 @media (max-height:300px){.zoom{bottom:8px;right:10px}}
 /* przypięcie na wierzchu: kolor z logo, żeby było widać od razu */
-.ib.pinned,.ib.pinned:hover{background:#FF6B1A;color:#fff}
+.ib.pinned,.ib.pinned:hover{position:relative;background:transparent;color:#fff}
+.ib.pinned::before{content:"";position:absolute;inset:0;border-radius:inherit;background:#FF6B1A}
+.ib.pinned svg{position:relative}
+.ib.pinIn::before{animation:pinBg .42s var(--spring)}.ib.pinIn svg{animation:wbij .48s var(--spring)}.ib.pinOut svg{animation:wyjmij .32s ease-out}
+@keyframes pinBg{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
+@keyframes wbij{0%{transform:translateY(-5px) rotate(-28deg)}60%{transform:translateY(1px) rotate(4deg)}100%{transform:none}}
+@keyframes wyjmij{40%{transform:translateY(-3px) rotate(-14deg)}100%{transform:none}}
 #pinMark{display:none;position:fixed;top:12px;right:14px;z-index:55;width:22px;height:22px;border-radius:6px;background:#FF6B1A;color:#fff;align-items:center;justify-content:center;pointer-events:none}
 #pinMark svg{width:14px;height:14px}
 .frame-win body.bare #pinMark{top:5px;right:152px}

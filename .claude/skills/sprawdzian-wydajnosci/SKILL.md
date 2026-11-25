@@ -23,6 +23,7 @@ Chrome bez okna w kontenerze, renderowanie programowe; liczby służą do porów
 | data | dodanie 500 obrazów | przesuwanie (fps) | przybliżone ×3 (fps) |
 |---|---|---|---|
 | 2026-11-22 | 22,1 s (głównie tworzenie obrazów testowych) | 54 | 59 |
+| 2026-11-25 | 25,8 s; po dodaniu animacji „sprężyna” (porządkowanie 300 obrazów: 24 ms, przejazd 47 fps) | 53 | 59 |
 
 ## Zasada
 

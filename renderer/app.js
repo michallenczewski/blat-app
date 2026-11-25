@@ -319,8 +319,9 @@ function arrange() {
   let list = selItems().filter(i => i.type !== 'frame');
   let frame = null;
   if (!list.length) { const f = selItems().find(i => i.type === 'frame'); if (f) { frame = f; list = board.items.filter(o => o.type !== 'frame' && inside(o, f)); } }
-  if (list.length < 2) { tip(_t('Zaznacz co najmniej dwa obrazy')); return; }
+  if (list.length < 2) { const b = $('#arrangeBtn'); b.classList.remove('nie'); void b.offsetWidth; b.classList.add('nie'); tip(_t('Zaznacz co najmniej dwa obrazy')); return; }
   snapshot();
+  const moved = frame ? [...list, frame] : list, before = new Map(moved.map(i => [i.id, { x: i.x, y: i.y, w: i.w, h: i.h }]));
   const b = bbox(list), gap = 16;
   const imgs = list.filter(i => i.type === 'image'), notes = list.filter(i => i.type !== 'image');
   const H = imgs.length ? imgs.map(i => i.h).sort((a, c) => a - c)[Math.floor(imgs.length / 2)] : 200;
@@ -332,7 +333,24 @@ function arrange() {
   if (row.length) y += H + gap;
   for (const n of notes) { n.x = b.x; n.y = Math.round(y); y += (n.h || 24) + gap; }
   if (frame) { const nb = bbox(list); frame.x = nb.x - 20; frame.y = nb.y - 46; frame.w = nb.w + 40; frame.h = nb.h + 66; }
-  drawAll(); changed();
+  drawAll(); changed(); glide(moved, before);
+}
+// obrazy przejeżdżają ze starych miejsc na nowe (FLIP, sama transformacja — płynnie także przy setkach obrazów)
+function glide(items, before) {
+  if (items.length > 400) return;
+  const done = e => { const el = e.currentTarget; el.style.transition = ''; el.style.transform = ''; el.style.transformOrigin = ''; el.removeEventListener('transitionend', done); };
+  const els2 = [];
+  for (const it of items) {
+    const el = els.get(it.id), o = before.get(it.id); if (!el || !o) continue;
+    const sx = it.w ? o.w / it.w : 1, sy = it.type === 'note' || !it.h ? 1 : o.h / it.h;
+    if (Math.abs(o.x - it.x) < 1 && Math.abs(o.y - it.y) < 1 && Math.abs(sx - 1) < .01 && Math.abs(sy - 1) < .01) continue;
+    el.style.transition = 'none'; el.style.transformOrigin = '0 0';
+    el.style.transform = 'translate(' + (o.x - it.x) + 'px,' + (o.y - it.y) + 'px) scale(' + sx + ',' + sy + ')';
+    els2.push(el);
+  }
+  if (!els2.length) return;
+  void world.offsetWidth;
+  els2.forEach((el, n) => { el.style.transition = 'transform .5s var(--spring) ' + Math.min(n * 12, 160) + 'ms'; el.style.transform = ''; el.addEventListener('transitionend', done); });
 }
 
 /* ---------- widok ---------- */
@@ -536,6 +554,7 @@ main.addEventListener('pointermove', e => { lastPointer = { x: e.clientX, y: e.c
 function setTool(t) {
   tool = t;
   for (const b of document.querySelectorAll('#tools .ib')) b.classList.toggle('on', b.dataset.tool === t);
+  const on = $('#tools .ib.on'), ind = $('#tools .ind'); if (on && ind) ind.style.transform = 'translateX(' + on.offsetLeft + 'px)';
   main.className = main.className.replace(/\btool-\w+/g, '').trim(); if (t !== 'select') main.classList.add('tool-' + t);
 }
 addEventListener('keydown', e => {
@@ -665,7 +684,9 @@ let onTop = false;
 // przypięcie na wierzchu: pomarańczowy przycisk z pełną pinezką; w trybie bez nawigacji mała pinezka w rogu
 function toggleTop(v) {
   onTop = v == null ? !onTop : v;
-  for (const b of [$('#topBtn'), $('#pillTop')]) { if (!b) continue; b.classList.toggle('pinned', onTop); b.innerHTML = onTop ? IC.pinOn : IC.pin; b.title = (onTop ? _t('Przypięty na wierzchu') : _t('Zawsze na wierzchu')) + ' (P)'; }
+  const anim = onTop !== $('#topBtn').classList.contains('pinned');
+  for (const b of [$('#topBtn'), $('#pillTop')]) { if (!b) continue; b.classList.toggle('pinned', onTop);
+    if (anim) { b.classList.remove('pinIn', 'pinOut'); void b.offsetWidth; b.classList.add(onTop ? 'pinIn' : 'pinOut'); } b.innerHTML = onTop ? IC.pinOn : IC.pin; b.title = (onTop ? _t('Przypięty na wierzchu') : _t('Zawsze na wierzchu')) + ' (P)'; }
   document.body.classList.toggle('ontop', onTop);
   if (v == null) { api.setOnTop(onTop); tip(onTop ? _t('Blat zostaje na wierzchu') : _t('Blat zachowuje się jak zwykłe okno')); } }
 function emptyTexts() {
@@ -688,7 +709,7 @@ function initUi() {
   $('#where').onclick = () => api.boardReveal();
   wheelTexts();
   const tools = [['select', IC.select, 'Zaznaczanie', 'V'], ['note', IC.note, 'Notatka', 'T'], ['frame', IC.frame, 'Ramka', 'F']];
-  $('#tools').innerHTML = tools.map(([t, ic, n, k]) => '<button class="ib" data-tool="' + t + '" title="' + _t(n) + ' (' + k + ')">' + ic + '</button>').join('');
+  $('#tools').innerHTML = '<div class="ind"></div>' + tools.map(([t, ic, n, k]) => '<button class="ib" data-tool="' + t + '" title="' + _t(n) + ' (' + k + ')">' + ic + '</button>').join('');
   for (const b of document.querySelectorAll('#tools .ib')) b.onclick = () => setTool(b.dataset.tool);
   // pastylka w trybie bez nawigacji: pojawia się przy ruchu myszy, znika po dwóch sekundach
   $('#pillUi').innerHTML = IC.ui; $('#pillUi').onclick = e => { e.stopPropagation(); toggleBare(false); };
@@ -775,11 +796,19 @@ window.blatTest = {
       const z0 = board.view.z; main.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, deltaMode: 1, clientX: 300, clientY: 300, cancelable: true }));
       ok(board.view.z > z0, 'kółko myszy przybliża płótno'); }
     // przypięcie na wierzchu ma być wyraźnie widać (zgłoszenie Michała 24.11.2026)
-    { const was = onTop, bg = () => getComputedStyle($('#topBtn')).backgroundColor;
+    { const was = onTop, bg = () => { const c = getComputedStyle($('#topBtn'), '::before'); return c.content === 'none' ? getComputedStyle($('#topBtn')).backgroundColor : c.backgroundColor; };
       toggleTop(true); const on = bg(); toggleTop(false); const off = bg();
       ok(on === 'rgb(255, 107, 26)' && off !== on, 'przypięty przycisk pinezki jest pomarańczowy, odpięty nie');
       toggleBare(true); toggleTop(true); const pm = $('#pinMark'); ok(pm && getComputedStyle(pm).display !== 'none', 'w trybie bez nawigacji przypięcie widać w rogu');
       toggleTop(false); ok(!pm || getComputedStyle(pm).display === 'none', 'po odpięciu znak w rogu znika'); toggleBare(false); toggleTop(was); }
+    // animacje „sprężyna” i reakcja porządkowania (prośba Michała 25.11.2026)
+    { setTool('note'); const ind = $('#tools .ind'), on = $('#tools .ib[data-tool="note"]');
+      ok(ind && Math.abs(ind.getBoundingClientRect().left - on.getBoundingClientRect().left) < 40 && ind.style.transform.includes('translate'), 'wskaźnik narzędzi przesuwa się pod wybrane narzędzie'); setTool('select');
+      sel.clear(); arrange(); ok($('#arrangeBtn').classList.contains('nie'), 'porządkowanie bez zaznaczenia potrząsa przyciskiem');
+      const imgs = board.items.filter(i => i.type === 'image').slice(0, 3);
+      if (imgs.length >= 2) { imgs[0].x += 500; drawAll(); sel = new Set(imgs.map(i => i.id)); arrange(); const el = els.get(imgs[0].id);
+        ok(el.style.transition.includes('transform') || el.style.transform !== '', 'uporządkowane obrazy przejeżdżają na nowe miejsca'); undo(); sel.clear(); }
+      else ok(false, 'za mało obrazów do sprawdzenia porządkowania'); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();
