@@ -168,6 +168,8 @@ body.bare #fspill{-webkit-app-region:no-drag}
 /* małe okno: blat z referencjami w rogu ekranu; najpierw znika lista blatów, potem wszystko poza płótnem i narzędziami */
 @media (max-width:620px){body:not(.bare){grid-template-columns:0 minmax(0,1fr)}aside{visibility:hidden}#sideBtn,.title .p,.title .s,.sep{display:none}.title{margin-left:4px}}
 @media (max-width:420px){.title .saved,#zoomHint{display:none}}
+@media (max-width:380px){.frame-mac .title{display:none}}
+@media (max-width:360px){.frame-mac #arrangeBtn{display:none}}
 @media (max-height:300px){.zoom{bottom:8px;right:10px}}
 /* przypięcie na wierzchu: kolor z logo, żeby było widać od razu */
 .ib.pinned,.ib.pinned:hover{position:relative;background:transparent;color:#fff}
@@ -183,7 +185,7 @@ body.bare #fspill{-webkit-app-region:no-drag}
 .fs.frame-win body.bare #pinMark{top:12px;right:14px}
 body.bare.ontop #pinMark{display:flex}
 body.bare.ontop.moving #pinMark{display:none}
-/* mniej ruchu, gdy system o to prosi (wytyczne interakcji, pkt 8) */
+/* mniej ruchu, gdy system o to prosi (wytyczne interakcji, pkt 9) */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
 </style>
@@ -197,12 +199,13 @@ body.bare.ontop.moving #pinMark{display:none}
   <span class="sep"></span>
   <button class="ib" id="arrangeBtn"></button>
   <button class="ib" id="topBtn"></button>
+  <button class="ib" id="setBtn"></button>
 </header>
 <aside>
   <div class="sh"><span data-t="Blaty"></span><button class="ib" id="newBtn"></button></div>
   <ul class="nav" id="boards"></ul>
   <button id="upd" hidden></button>
-  <div class="foot"><span class="where" id="where"></span><button class="ib" id="setBtn"></button><button class="ib" id="keysBtn"></button><button class="ib" id="themeBtn"></button></div>
+  <div class="foot"><span class="where" id="where"></span></div>
 </aside>
 <main id="main" tabindex="0">
   <div id="world"></div>

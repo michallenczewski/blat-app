@@ -24,12 +24,9 @@ const IC = {
   pin: svg('<g transform="rotate(45 8 8)"><path d="M5.5 2.5h5l-.8 4.5h-3.4z"/><path d="M6.3 7h3.4l1.8 2.5h-7zM8 9.5v4.5"/></g>'),
   pinOn: svg('<g transform="rotate(45 8 8)"><path d="M5.5 2.5h5l-.8 4.5h-3.4z" fill="currentColor"/><path d="M6.3 7h3.4l1.8 2.5h-7zM8 9.5v4.5"/></g>'),
   plus: svg('<path d="M8 3v10M3 8h10"/>', 13),
-  moon: svg('<path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/>'),
   ui: svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.2h12"/>'),
   fs: svg('<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>') + svg('<path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/>'),
   set: svg('<path d="M2.5 5.5h11M2.5 10.5h11"/><circle cx="6" cy="5.5" r="1.8" fill="var(--bg)"/><circle cx="10.5" cy="10.5" r="1.8" fill="var(--bg)"/>'),
-  keys: svg('<rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.01M6.7 6.5h.01M9.3 6.5h.01M12 6.5h.01M5 9.5h6"/>'),
-  sun: svg('<circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.5M8 12.9v1.5M3.5 3.5l1 1M11.5 11.5l1 1M1.6 8h1.5M12.9 8h1.5M3.5 12.5l1-1M11.5 4.5l1-1"/>'),
 };
 
 /* ---------- stan ---------- */
@@ -157,12 +154,14 @@ const toWorld = (cx, cy) => { const r = main.getBoundingClientRect(), v = board.
 const centerWorld = () => { const r = main.getBoundingClientRect(); return toWorld(r.left + r.width / 2, r.top + r.height / 2); };
 
 /* ---------- motyw ---------- */
+// motyw: jasny, ciemny albo jak w systemie (brak zapisu = jak w systemie); wybór w menu ustawień
+const themeMode = () => { try { return localStorage.getItem('blatTheme') || 'system'; } catch (e) { return 'system'; } };
+function setThemeMode(m) { try { if (m === 'system') localStorage.removeItem('blatTheme'); else localStorage.setItem('blatTheme', m); } catch (e) {} applyTheme(); }
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (themeMode() === 'system') applyTheme(); });
 function applyTheme() {
-  let t = localStorage.getItem('blatTheme');
-  if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  let t = themeMode();
+  if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   document.documentElement.dataset.theme = t;
-  $('#themeBtn').innerHTML = t === 'dark' ? IC.sun : IC.moon;
-  $('#themeBtn').title = _t(t === 'dark' ? 'Tryb jasny' : 'Tryb ciemny');
   const cs = getComputedStyle(document.documentElement);
   // Windows: w trybie bez nawigacji przyciski okna leżą na płótnie, więc dostają jego kolor i niższy pasek
   const bareWin = isBare() && !isFs();
@@ -884,7 +883,14 @@ function wheelTexts() { $('#zoomHint').textContent = wheelMode === 'zoom' ? _t('
 let updState = null;
 function showSettings() {
   const r = $('#setBtn').getBoundingClientRect(), u = updState || {};
+  const tm = themeMode();
   const rows = [
+    [_t('Jasny motyw'), () => setThemeMode('light'), tm === 'light' ? '✓' : ''],
+    [_t('Ciemny motyw'), () => setThemeMode('dark'), tm === 'dark' ? '✓' : ''],
+    [_t('Motyw jak w systemie'), () => setThemeMode('system'), tm === 'system' ? '✓' : ''],
+    '-',
+    [_t('Skróty klawiszowe'), () => toggleKeys(true), '?'],
+    '-',
     [_t('Kółko myszy przybliża'), () => setWheelMode('zoom'), wheelMode === 'zoom' ? '✓' : ''],
     [_t('Kółko myszy przesuwa'), () => setWheelMode('pan'), wheelMode === 'pan' ? '✓' : ''],
     '-',
@@ -893,8 +899,8 @@ function showSettings() {
   ];
   if (u.state === 'available' || u.state === 'downloading') rows.push([_t('Zainstaluj wersję') + ' ' + u.version, () => api.updateInstall && api.updateInstall()]);
   else rows.push([_t('Sprawdź aktualizacje'), checkUpdates]);
-  showMenu(r.left, r.top, rows);
-  const m = $('#menu'); m.style.top = Math.max(8, r.top - m.offsetHeight - 6) + 'px';
+  showMenu(r.left, r.bottom + 6, rows);
+  const m = $('#menu'); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
 }
 async function checkUpdates() {
   if (!api.updateCheck) return;
@@ -959,9 +965,7 @@ function initUi() {
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż zaznaczone') + ' (A)'; $('#arrangeBtn').onclick = arrange;
   $('#topBtn').onclick = () => toggleTop(); $('#pillTop').onclick = e => { e.stopPropagation(); toggleTop(); }; $('#pinMark').innerHTML = IC.pinOn; toggleTop(onTop);
   $('#setBtn').innerHTML = IC.set; $('#setBtn').title = _t('Ustawienia'); $('#setBtn').onclick = e => { e.stopPropagation(); showSettings(); };
-  $('#keysBtn').innerHTML = IC.keys; $('#keysBtn').title = _t('Skróty klawiszowe') + ' (?)'; $('#keysBtn').onclick = () => toggleKeys(true);
   $('#keys').addEventListener('click', e => { if (!e.target.closest('.kc')) toggleKeys(false); });
-  $('#themeBtn').onclick = () => { localStorage.setItem('blatTheme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); applyTheme(); };
   $('#bname').ondblclick = renameStart; $('#bname').title = _t('Dwuklik zmienia nazwę');
   $('#where').onclick = () => api.boardReveal();
   wheelTexts();
@@ -1145,6 +1149,15 @@ window.blatTest = {
       const tmp = board.name; await this.open(src); await api.boardTrash(tmp); await refreshBoards();
       sel = new Set([dr.id]); this.remove(); sel.clear(); drawAll();
     }
+    // ustawienia w prawym górnym rogu, motyw i skróty w menu ustawień (wspólna zasada rodziny, 26.11.2026)
+    { const sb = $('#setBtn'), hd = $('header'), btns = [...hd.querySelectorAll('.ib')].filter(b => b.offsetParent);
+      ok(sb && hd.contains(sb) && btns[btns.length - 1] === sb, 'przycisk ustawień jest ostatni w górnym pasku');
+      ok(!$('#themeBtn') && !$('#keysBtn'), 'na dole bocznego paska nie ma osobnych przycisków motywu i ściągi');
+      const th0 = localStorage.getItem('blatTheme'); showSettings(); await new Promise(r => setTimeout(r, 30)); const t = $('#menu').innerText;
+      ok(t.includes(_t('Jasny motyw')) && t.includes(_t('Ciemny motyw')) && t.includes(_t('Motyw jak w systemie')) && t.includes(_t('Skróty klawiszowe')), 'menu ustawień ma motyw i skróty klawiszowe');
+      const mr = $('#menu').getBoundingClientRect(), br = sb.getBoundingClientRect(); ok(mr.top >= br.bottom - 1 && mr.right <= innerWidth, 'menu ustawień otwiera się pod przyciskiem');
+      hideMenu(); setThemeMode('dark'); ok(document.documentElement.dataset.theme === 'dark', 'ciemny motyw z ustawień'); setThemeMode('light'); ok(document.documentElement.dataset.theme === 'light', 'jasny motyw z ustawień');
+      if (th0) localStorage.setItem('blatTheme', th0); else localStorage.removeItem('blatTheme'); applyTheme(); }
     // ustawienia: wersja, aktualizacje, aktywowanie po najechaniu (prośba Michała 25.11.2026)
     { showSettings(); await new Promise(r => setTimeout(r, 50)); const t = $('#menu').innerText;
       ok(/Blat \S+/.test(t) && t.includes(_t('Sprawdź aktualizacje')), 'ustawienia pokazują wersję i „Sprawdź aktualizacje”');

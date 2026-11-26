@@ -1,7 +1,6 @@
 // Słownik angielski: klucz = napis polski z _t(...). Sprawdza go scripts/tlumaczenia.mjs.
 window.BLAT_EN = {
-  'Blaty': 'Boards', 'Blaty w': 'Boards in', 'Nowy blat': 'New board', 'Pierwszy blat': 'First board',
-  'Tryb jasny': 'Light mode', 'Tryb ciemny': 'Dark mode', 'Notatka': 'Note', 'Ramka': 'Frame', 'Zaznaczanie': 'Select',
+  'Blaty': 'Boards', 'Blaty w': 'Boards in', 'Nowy blat': 'New board', 'Pierwszy blat': 'First board', 'Notatka': 'Note', 'Ramka': 'Frame', 'Zaznaczanie': 'Select',
   'element': 'item', 'elementy': 'items', 'elementów': 'items',
   'zapisuję…': 'saving…', 'zapisane': 'saved', 'nie udało się zapisać': 'could not save',
   'Zmień nazwę…': 'Rename…', 'Pokaż w Finderze': 'Show in Finder', 'Pokaż w Eksploratorze': 'Show in Explorer', 'Przenieś do kosza': 'Move to Trash',
@@ -34,5 +33,6 @@ window.BLAT_EN = {
   'Masz najnowszą wersję': 'You have the latest version', 'Nie udało się sprawdzić aktualizacji': 'Could not check for updates', 'Blat stanie się aktywny, gdy najedziesz na niego kursorem': 'Blat will become active when you hover over it',
   'Kopiuj': 'Copy', 'Wytnij': 'Cut', 'Powiel': 'Duplicate', 'kopiuj / wytnij elementy': 'copy / cut items', 'powiel zaznaczone': 'duplicate selection',
   'Nie znalazłem plików części obrazów — blat źródłowy usunięto albo przeniesiono': 'Some image files were not found — the source board was deleted or moved',
+  'Jasny motyw': 'Light theme', 'Ciemny motyw': 'Dark theme', 'Motyw jak w systemie': 'Theme like the system',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
 };

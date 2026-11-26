@@ -13,7 +13,7 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | A | A | ułóż zaznaczone (albo zawartość ramki) |
 | 0, 1, Z | 0, 1, Z | całość, 100%, dopasuj zaznaczone |
 | spacja albo ⌥ + przeciąganie | spacja albo Alt + przeciąganie | przesuwanie widoku |
-| kółko myszy | kółko myszy | przybliżanie (w ustawieniach można zmienić na przesuwanie) |
+| kółko myszy | kółko myszy | przybliżanie (w ustawieniach — przycisk z suwakami w prawym górnym rogu — można zmienić na przesuwanie) |
 | gładzik dwoma palcami | gładzik dwoma palcami | przesuwanie płótna |
 | wciśnięte kółko | wciśnięte kółko | przesuwanie płótna |
 | ⌘ + kółko, szczypanie | Ctrl + kółko, szczypanie | przybliżanie |
