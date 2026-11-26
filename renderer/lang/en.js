@@ -35,4 +35,10 @@ window.BLAT_EN = {
   'Nie znalazłem plików części obrazów — blat źródłowy usunięto albo przeniesiono': 'Some image files were not found — the source board was deleted or moved',
   'Jasny motyw': 'Light theme', 'Ciemny motyw': 'Dark theme', 'Motyw jak w systemie': 'Theme like the system',
   'kółko': 'wheel', 'Nowa wersja': 'New version', 'Pobieram': 'Downloading', 'Instaluję…': 'Installing…',
+  'Nie udało się zapisać — spróbuję jeszcze raz': 'Could not save — I will try again',
+  'Nie udało się przenieść blatu do kosza': 'Could not move the board to the trash',
+  'Nie udało się zmienić nazwy blatu': 'Could not rename the board',
+  'Obrazy dodane do blatu': 'Images added to board',
+  'Przeciągnij Blat do Programów': 'Drag Blat to Applications',
+  'Nie udało się pobrać aktualizacji': 'Could not download the update',
 };

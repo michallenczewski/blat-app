@@ -1,10 +1,11 @@
 // Blat — płótno tablicy. Jeden plik, bez frameworka i bez budowania, jak Gapa.
-// Model: board = { v, name, items:[...], view:{x,y,z} }; element: { id, type:'image'|'note'|'frame', x,y,w,h, … }.
-// Nazwy typów są te same co w webowym Blacie (obraz, notatka, ramka), żeby kiedyś wymiana była prosta.
+// Model: board = { v, name, items:[...], view:{x,y,z} }; element: { id, type:'image'|'note'|'frame'|'drawing', x,y,w,h, … }.
+// Nazwy typów są te same co w webowym Blacie (obraz, notatka, ramka, rysunek), żeby kiedyś wymiana była prosta.
 'use strict';
 const $ = s => document.querySelector(s);
 const isMac = api.platform === 'darwin';
 const MOD = isMac ? '⌘' : 'Ctrl+';
+const SHIFT = isMac ? '⇧' : 'Shift';
 const errors = [];
 addEventListener('error', e => errors.push(String(e.message || e)));
 addEventListener('unhandledrejection', e => errors.push(String(e.reason && e.reason.message || e.reason)));
@@ -169,10 +170,20 @@ function applyTheme() {
 }
 
 /* ---------- rysowanie elementów ---------- */
+// widoczny obszar płótna (we współrzędnych świata) z zapasem pół ekranu z każdej strony; liczony raz na odświeżenie widoku
+let viewRect = null;
+function visRect() {
+  if (viewRect) return viewRect;
+  const v = board.view, w = main.clientWidth, h = main.clientHeight;
+  return (viewRect = { x: (-v.x - w / 2) / v.z, y: (-v.y - h / 2) / v.z, w: 2 * w / v.z, h: 2 * h / v.z });
+}
+addEventListener('resize', () => { viewRect = null; if (typeof setTool === 'function' && board) setTool(tool); });   // wskaźnik narzędzi, gdy w wąskim oknie część narzędzi znika
 function imgSrc(it) {
-  // na małym ekranowym rozmiarze wystarczy miniatura; pełny obraz dopiero po przybliżeniu
-  const px = Math.max(it.w, it.h) * board.view.z * DPR();
-  return api.imageUrl(board.name, px > 720 && it.img.full ? it.img.full : it.img.thumb || it.img.full);
+  // na małym ekranowym rozmiarze wystarczy miniatura; pełny obraz dopiero po przybliżeniu (720 px fizycznych,
+  // czyli na ekranie Retina już od 360 px) i tylko dla obrazów na ekranie albo tuż obok — reszta wraca do miniatury
+  const px = Math.max(it.w, it.h) * board.view.z * DPR(), r = visRect();
+  const seen = it.x < r.x + r.w && it.x + it.w > r.x && it.y < r.y + r.h && it.y + it.h > r.y;
+  return api.imageUrl(board.name, px > 720 && seen && it.img.full ? it.img.full : it.img.thumb || it.img.full);
 }
 function drawItem(it) {
   let el = els.get(it.id);
@@ -203,7 +214,7 @@ function drawItem(it) {
     const n = board.items.filter(o => o.type !== 'frame' && o.type !== 'drawing' && inside(o, it)).length;
     el.querySelector('span').textContent = n ? n + ' ' + plural(n, 'element', 'elementy', 'elementów') : '';
   }
-  if (it.type === 'note' && el.contentEditable !== 'true' && el.textContent !== (it.text || '')) el.textContent = it.text || '';
+  if (it.type === 'note' && !el.isContentEditable && el.textContent !== (it.text || '')) el.textContent = it.text || '';
   el.classList.toggle('sel', sel.has(it.id));
   let hd = el.querySelector('.hd');
   const showHd = sel.size === 1 && sel.has(it.id) && it.type !== 'drawing';
@@ -227,13 +238,12 @@ function drawAll() {
   ranks(); renderPenOpts();
   const ids = new Set(board.items.map(i => i.id));
   for (const [id, el] of els) if (!ids.has(id)) { el.remove(); els.delete(id); }
-  for (const it of board.items) drawItem(it);
+  for (const it of board.items) drawItem(it);   // ramki (z licznikiem zawartości) też tu
   main.classList.toggle('isempty', board.items.length === 0);
-  frameCounts();
 }
 function frameCounts() { for (const f of board.items) if (f.type === 'frame') drawItem(f); }
 function applyView() {
-  const v = board.view;
+  const v = board.view; viewRect = null;
   world.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.z + ')';
   $('#zoomPct').textContent = Math.round(v.z * 100) + '%';
   clearTimeout(applyView.t);
@@ -247,12 +257,35 @@ function changed() {
   clearTimeout(saveT); saveT = setTimeout(saveNow, 700);
   main.classList.toggle('isempty', board.items.length === 0);
 }
+// Zapisy idą po kolei (nigdy dwa naraz). Nieudany zapis ponawia się sam po 2 s.
+let saving = null;
 async function saveNow() {
+  while (saving) await saving;
   if (!board || !dirty) return;
   clearTimeout(saveT); dirty = false;
-  try { await api.boardSave(board.name, board); $('#saved').textContent = _t('zapisane'); }
-  catch (e) { dirty = true; $('#saved').textContent = _t('nie udało się zapisać'); errors.push(e.message); }
-  refreshBoards();
+  const b = board;
+  saving = (async () => {
+    try { const r = await api.boardSave(b.name, b); if (board === b) $('#saved').textContent = _t('zapisane'); boardRow(r && r.row); }
+    catch (e) {
+      errors.push(e.message);
+      const gone = /nie istnieje/.test(e.message);   // folder blatu usunięto (kosz, Finder, Eksplorator): nie ma czego ponawiać
+      if (gone) boardsCache = boardsCache.filter(x => x.name !== b.name);
+      if (board === b && !gone) { dirty = true; $('#saved').textContent = _t('nie udało się zapisać'); clearTimeout(saveT); saveT = setTimeout(saveNow, 2000); }
+    }
+  })();
+  try { await saving; } finally { saving = null; }
+}
+const byName = n => boardsCache.some(b => b.name === n);
+// po zapisie odświeżamy tylko wiersz bieżącego blatu (bez czytania wszystkich blatów z dysku)
+function boardRow(row) {
+  if (!row) return;
+  const li = [...$('#boards').children].find(l => l.dataset.name === row.name);
+  if (!li) { refreshBoards(); return; }
+  const c = boardsCache.find(b => b.name === row.name); if (c) Object.assign(c, row);
+  li.querySelector('small').textContent = row.count;
+  const th = li.querySelector('.th'), key = row.thumbs.join('|');
+  if (th.dataset.k !== key) { th.dataset.k = key; th.innerHTML = ''; for (const t of row.thumbs) { const i = document.createElement('i'); i.style.backgroundImage = 'url("' + api.imageUrl(row.name, t) + '")'; th.appendChild(i); } }
+  if (li !== li.parentNode.firstElementChild) li.parentNode.prepend(li);   // ostatnio zmieniony na górze, jak po odświeżeniu
 }
 function undo(redo) {
   const from = redo ? redoStack : undoStack, to = redo ? undoStack : redoStack;
@@ -272,15 +305,15 @@ async function refreshBoards() {
   $('#where').title = r.dir;
   const ul = $('#boards'); ul.innerHTML = '';
   for (const b of r.boards) {
-    const li = document.createElement('li'); li.className = board && b.name === board.name ? 'on' : '';
-    const th = document.createElement('span'); th.className = 'th';
+    const li = document.createElement('li'); li.className = board && b.name === board.name ? 'on' : ''; li.dataset.name = b.name;
+    const th = document.createElement('span'); th.className = 'th'; th.dataset.k = b.thumbs.join('|');
     for (const t of b.thumbs) { const i = document.createElement('i'); i.style.backgroundImage = 'url("' + api.imageUrl(b.name, t) + '")'; th.appendChild(i); }
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = b.name;
     const sm = document.createElement('small'); sm.textContent = b.count;
     li.append(th, nm, sm);
     li.onclick = () => openBoard(b.name);
     li.oncontextmenu = e => { e.preventDefault(); showMenu(e.clientX, e.clientY, [
-      [_t('Zmień nazwę…'), () => { openBoard(b.name).then(renameStart); }],
+      [_t('Zmień nazwę…'), () => { openBoard(b.name).then(() => { if (board && board.name === b.name) renameStart(); }); }],
       [_t(isMac ? 'Pokaż w Finderze' : 'Pokaż w Eksploratorze'), () => api.boardReveal(b.name)],
       '-',
       [_t('Przenieś do kosza'), () => trashBoard(b.name), 'warn']]); };
@@ -289,7 +322,9 @@ async function refreshBoards() {
   return r;
 }
 async function openBoard(name) {
+  clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; }   // przesunięty widok zapisujemy od razu
   await saveNow();
+  if (dirty && board && byName(board.name)) { tip(_t('Nie udało się zapisać — spróbuję jeszcze raz')); return; }
   if (board) pruneImages(board);
   const b = await api.boardLoad(name);
   if (!b) { tip(_t('Nie udało się otworzyć blatu')); return; }
@@ -306,26 +341,33 @@ function setBoard(b) {
 }
 async function newBoard() { await saveNow(); const b = await api.boardNew(_t('Nowy blat')); setBoard(b); renameStart(); }
 async function trashBoard(name) {
-  if (board && board.name === name) { dirty = false; clearTimeout(saveT); }
-  await api.boardTrash(name);
+  if (board && board.name === name) { dirty = false; clearTimeout(saveT); clearTimeout(viewT); viewT = 0; }
+  if (!(await api.boardTrash(name))) { tip(_t('Nie udało się przenieść blatu do kosza')); return; }
   const r = await refreshBoards();
   if (!board || board.name === name) { if (r.boards[0]) openBoard(r.boards[0].name); else newBoard(); }
 }
+// pliki obrazów w trakcie dodawania: jeszcze ich nie ma w elementach blatu, a nie wolno ich skasować
+const pending = new Set();
 function pruneImages(b) {
-  const keep = []; for (const i of [...b.items, ...(clip && clip.board === b.name ? clip.items : [])]) if (i.img) { if (i.img.full) keep.push(i.img.full); if (i.img.thumb) keep.push(i.img.thumb); }   // wycięte obrazy czekają w schowku
+  const keep = [...pending].filter(k => k.startsWith(b.name + '/')).map(k => k.slice(b.name.length + 1));
+  for (const i of [...b.items, ...(clip && clip.board === b.name ? clip.items : [])]) if (i.img) { if (i.img.full) keep.push(i.img.full); if (i.img.thumb) keep.push(i.img.thumb); }   // wycięte obrazy czekają w schowku
   api.imagesPrune(b.name, keep);
+}
+async function renameBoard(v) {
+  clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; }
+  await saveNow();
+  let n; try { n = await api.boardRename(board.name, v); } catch (e) { errors.push(e.message); tip(_t('Nie udało się zmienić nazwy blatu')); return null; }
+  if (!n) { tip(_t('Blat o tej nazwie już istnieje')); return null; }
+  if (clip && clip.board === board.name) clip.board = n;
+  board.name = n; $('#bname').textContent = n; document.title = n + ' — Blat'; dirty = true; await saveNow(); drawAll(); refreshBoards();
+  return n;
 }
 function renameStart() {
   const b = $('#bname'), inp = document.createElement('input'); inp.value = board.name; b.replaceWith(inp); inp.focus(); inp.select();
-  const done = async ok => {
+  const done = ok => {
     if (!inp.isConnected) return;
     const v = inp.value.trim(); inp.replaceWith(b);
-    if (ok && v && v !== board.name) {
-      await saveNow();
-      const n = await api.boardRename(board.name, v);
-      if (n) { if (clip && clip.board === board.name) clip.board = n; board.name = n; b.textContent = n; document.title = n + ' — Blat'; dirty = true; saveNow(); drawAll(); }
-      else tip(_t('Blat o tej nazwie już istnieje'));
-    }
+    if (ok && v && v !== board.name) renameBoard(v);
   };
   inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
   inp.onblur = () => done(true);
@@ -340,7 +382,7 @@ async function toBlob(bmp, max, type, q) {
   return new Promise(r => c.toBlob(r, type, q));
 }
 // obraz trafia do tablicy w dwóch wersjach: miniatura do oglądania z daleka i pełny (najwyżej 4K)
-async function storeImage(blob, name) {
+async function storeImage(blob, name, bname) {
   const bmp = await createImageBitmap(blob);
   const id = uid(), keepOrig = Math.max(bmp.width, bmp.height) <= MAXFULL && /^image\/(jpeg|png|webp|gif)$/.test(blob.type);
   const ext = keepOrig ? ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' })[blob.type] : 'webp';
@@ -348,36 +390,48 @@ async function storeImage(blob, name) {
   const thumb = Math.max(bmp.width, bmp.height) > THUMB ? await toBlob(bmp, THUMB, 'image/webp', 0.85) : null;
   const img = { full: id + '.' + ext, thumb: thumb ? id + '-m.webp' : null, w: bmp.width, h: bmp.height, src: name || '' };
   bmp.close();
-  await api.imagePut(board.name, img.full, await full.arrayBuffer());
-  if (thumb) await api.imagePut(board.name, img.thumb, await thumb.arrayBuffer());
+  for (const f of [img.full, img.thumb]) if (f) pending.add(bname + '/' + f);
+  await api.imagePut(bname, img.full, await full.arrayBuffer());
+  if (thumb) await api.imagePut(bname, img.thumb, await thumb.arrayBuffer());
   return img;
 }
 // kilka obrazów naraz: układamy je w rząd od wskazanego punktu, o jednakowej wysokości
+// Obrazy trafiają zawsze do blatu, na którym zaczął się import — także jeśli w trakcie przełączono blat.
 async function addImages(blobs, at) {
   if (!blobs.length) return [];
-  const p = at || centerWorld();
+  const target = board, p = at || centerWorld();
   tip(blobs.length > 1 ? _t('Dodaję obrazy…') + ' ' + blobs.length : _t('Dodaję obraz…'));
-  const H = Math.round(260 / board.view.z);   // nowe obrazy mają ok. 260 px wysokości na ekranie
+  const H = Math.round(260 / target.view.z);   // nowe obrazy mają ok. 260 px wysokości na ekranie
   const made = [];
-  for (const [blob, name] of blobs) {
-    try { made.push(await storeImage(blob, name)); }
-    catch (e) { tip(_t('Tego formatu Blat jeszcze nie czyta') + (name ? ': ' + name : '')); }
-  }
-  if (!made.length) return [];
-  snapshot();
-  const top = Math.max(0, ...board.items.map(i => i.z || 0)) + 1;
+  try {
+    for (const [blob, name] of blobs) {
+      try { made.push(await storeImage(blob, name, target.name)); }
+      catch (e) { if (!byName(target.name) && boardsCache.length) break; tip(_t('Tego formatu Blat jeszcze nie czyta') + (name ? ': ' + name : '')); }
+    }
+    if (!made.length) return [];
+    const items = placeImages(target, made, p, H);
+    const cur = board && board.name === target.name ? board : null;   // także gdy w trakcie wrócono na ten blat
+    if (cur) {
+      snapshot(); cur.items.push(...items); sel = new Set(items.map(i => i.id)); drawAll(); changed();
+      tip(items.length > 1 ? _t('Dodane obrazy') + ': ' + items.length : _t('Dodany obraz'));
+    } else {
+      // blat zmieniono w trakcie: dopisujemy do tamtego blatu (wczytanego na nowo, bo mógł się zmienić) i zapisujemy
+      const t = await api.boardLoad(target.name);
+      if (t) { t.items = (t.items || []).concat(items); await api.boardSave(target.name, t); refreshBoards(); tip(_t('Obrazy dodane do blatu') + ' „' + target.name + '”'); }
+    }
+    return items;
+  } finally { for (const img of made) for (const f of [img.full, img.thumb]) pending.delete(target.name + '/' + f); }
+}
+function placeImages(target, made, p, H) {
+  const top = Math.max(0, ...target.items.map(i => i.z || 0)) + 1;
   let x = p.x, y = p.y - H / 2;
   const rowW = Math.max(900, Math.sqrt(made.length) * H * 1.6);
   const items = [];
   made.forEach((img, k) => {
     const w = Math.round(H * img.w / img.h);
     if (x - p.x > rowW) { x = p.x; y += H + 16; }
-    const it = { id: uid(), type: 'image', x: Math.round(x), y: Math.round(y), w, h: Math.round(H), z: top + k, img };
-    board.items.push(it); items.push(it); x += w + 16;
+    items.push({ id: uid(), type: 'image', x: Math.round(x), y: Math.round(y), w, h: Math.round(H), z: top + k, img }); x += w + 16;
   });
-  sel = new Set(items.map(i => i.id));
-  drawAll(); changed();
-  tip(items.length > 1 ? _t('Dodane obrazy') + ': ' + items.length : _t('Dodany obraz'));
   return items;
 }
 const isImgName = n => /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(n || '');
@@ -401,12 +455,12 @@ function addNote(p, text) {
 }
 function editNote(it) {
   const el = els.get(it.id); if (!el) return;
-  el.contentEditable = 'true'; el.focus();
+  el.contentEditable = 'plaintext-only'; el.focus();   // wklejony tekst bez formatowania i obrazków
   const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
   const done = () => {
     el.contentEditable = 'false'; el.removeEventListener('blur', done);
     const t = el.innerText.replace(/\n+$/, '');
-    if (!t.trim()) { board.items = board.items.filter(i => i !== it); sel.delete(it.id); drawAll(); changed(); return; }
+    if (!t.trim()) { if (it.text) snapshot(); board.items = board.items.filter(i => i !== it); sel.delete(it.id); drawAll(); changed(); return; }   // notatka z tekstem: usunięcie da się cofnąć
     if (t !== it.text) { snapshot(); it.text = t; changed(); }
     drawItem(it);
   };
@@ -491,14 +545,14 @@ function fit(list) {
   applyView(); changedView();
 }
 let viewT = 0;
-function changedView() { clearTimeout(viewT); viewT = setTimeout(() => { dirty = true; saveNow(); }, 1500); }   // widok zapisujemy po cichu
+function changedView() { clearTimeout(viewT); viewT = setTimeout(() => { viewT = 0; dirty = true; saveNow(); }, 1500); }   // widok zapisujemy po cichu
 
 /* ---------- myszka ---------- */
 let drag = null, spaceDown = false;
 main.addEventListener('pointerdown', e => {
   if (e.target.closest('input')) return;
   const it = e.target.closest('.it'), item = it && byId(it.dataset.id);
-  if (item && item.type === 'note' && els.get(item.id).contentEditable === 'true') return;
+  if (item && item.type === 'note' && els.get(item.id).isContentEditable) return;
   main.focus({ preventScroll: true });
   hideMenu();
   const w = toWorld(e.clientX, e.clientY);
@@ -514,9 +568,9 @@ main.addEventListener('pointerdown', e => {
     world.appendChild(live); sel.clear(); drawAll();
     drag = { kind: 'pen', pts: [[w.x, w.y]], sw, c: P[0], hl: !!P[2], live };
   }
-  else if (tool === 'frame') { snapshot(); const f = { id: uid(), type: 'frame', x: w.x, y: w.y, w: 1, h: 1, name: _t('Ramka'), z: 0 }; board.items.push(f); sel = new Set([f.id]); drawAll(); drag = { kind: 'newframe', f, ox: w.x, oy: w.y }; }
+  else if (tool === 'frame') { const redo0 = redoStack.slice(); snapshot(); const f = { id: uid(), type: 'frame', x: w.x, y: w.y, w: 1, h: 1, name: _t('Ramka'), z: 0 }; board.items.push(f); sel = new Set([f.id]); drawAll(); drag = { kind: 'newframe', f, ox: w.x, oy: w.y, redo0 }; }
   else if (e.target.classList.contains('hd') && item) {
-    snapshot(); drag = { kind: 'resize', item, ox: w.x, oy: w.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0,
+    drag = { kind: 'resize', moved: false, item, ox: w.x, oy: w.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0,
       kids: kidsOf(item.id).map(c => [c, c.x, c.y, c.w, c.h]) };
   } else if (item) {
     if (e.shiftKey || e.metaKey || e.ctrlKey) { sel.has(item.id) ? sel.delete(item.id) : sel.add(item.id); }
@@ -553,6 +607,7 @@ main.addEventListener('pointermove', e => {
     if (!drag.moved) { drag.moved = true; snapshot(); }
     for (const [o, x, y] of drag.start) { o.x = Math.round(x + dx); o.y = Math.round(y + dy); drawItem(o); }
   } else if (drag.kind === 'resize') {
+    if (!drag.moved) { drag.moved = true; snapshot(); }   // krok cofania dopiero przy prawdziwej zmianie rozmiaru
     const it = drag.item; let nw = Math.max(24, drag.w0 + w.x - drag.ox), nh = Math.max(24, drag.h0 + w.y - drag.oy);
     if (drag.ratio) nh = nw / drag.ratio;
     it.w = Math.round(nw); if (it.type !== 'note') it.h = Math.round(nh); drawItem(it);
@@ -583,9 +638,9 @@ function endDrag() {
     reparent(new Set(d.start.map(([o]) => o.id)));
     changed(); frameCounts();
   }
-  if (d.kind === 'resize') { changed(); drawItem(d.item); }
+  if (d.kind === 'resize' && d.moved) { changed(); drawItem(d.item); frameCounts(); }
   if (d.kind === 'newframe') {
-    if (d.f.w < 20 || d.f.h < 20) { board.items = board.items.filter(i => i !== d.f); sel.clear(); undoStack.pop(); }
+    if (d.f.w < 20 || d.f.h < 20) { board.items = board.items.filter(i => i !== d.f); sel.clear(); undoStack.pop(); redoStack.push(...d.redo0); }   // za mała ramka: jakby jej nie było
     else { d.f.x = Math.round(d.f.x); d.f.y = Math.round(d.f.y); d.f.w = Math.round(d.f.w); d.f.h = Math.round(d.f.h); changed(); setTool('select'); renameFrame(d.f); }
   }
   drawAll();
@@ -593,6 +648,7 @@ function endDrag() {
 main.addEventListener('pointerup', endDrag);
 main.addEventListener('pointercancel', endDrag);
 main.addEventListener('dblclick', e => {
+  if (tool === 'pen') return;   // z mazakiem i gumką dwuklik nic nie dodaje
   const el = e.target.closest('.it'), it = el && byId(el.dataset.id);
   if (!it) { addNote(toWorld(e.clientX, e.clientY)); return; }
   if (it.type === 'note') editNote(it);
@@ -613,7 +669,7 @@ function wheelKind(e, pure) {
   // jeden gest = jedno rozpoznanie (bezwładność gładzika potrafi wyglądać jak kółko)
   const now = performance.now(); if (now - wheelKind.t < 220) k = wheelKind.k; wheelKind.t = now; wheelKind.k = k; return k;
 }
-wheelKind.t = 0; wheelKind.k = 'pad';
+wheelKind.t = -1e9; wheelKind.k = 'pad';   // -1e9: pierwszy ruch kółka zaraz po starcie też rozpoznany na nowo
 let wheelMode = 'zoom'; try { if (localStorage.getItem('blatWheel') === 'pan') wheelMode = 'pan'; } catch (e) {}
 function setWheelMode(m) { wheelMode = m; try { localStorage.setItem('blatWheel', m); } catch (e) {} wheelTexts(); tip(m === 'zoom' ? _t('Kółko myszy przybliża') : _t('Kółko myszy przesuwa')); }
 main.addEventListener('wheel', e => {
@@ -641,7 +697,7 @@ main.addEventListener('contextmenu', e => {
     [_t('Ramka wokół zaznaczonych'), () => frameAround(selItems()), MOD + 'G'],
     [_t('Na wierzch'), () => reorder(1)], [_t('Na spód'), () => reorder(-1)],
     [_t('Pokaż'), () => fit(selItems()), 'Z'],
-    '-', [_t('Usuń'), removeSel, 'Del', 'warn']
+    '-', [_t('Usuń'), removeSel, isMac ? '⌫' : 'Delete', 'warn']
   ] : [
     [_t('Notatka'), () => addNote(p), 'T'],
     [_t('Wklej'), () => pasteFromClipboard(p), MOD + 'V'],
@@ -679,7 +735,14 @@ main.addEventListener('drop', async e => {
   if (files.length) { addImages(await filesToBlobs(files), p); return; }
   // obraz przeciągnięty z przeglądarki internetowej bez pliku: pobieramy go z adresu
   const url = (e.dataTransfer.getData('text/uri-list') || '').split('\n').find(u => /^https?:/.test(u)) || ((e.dataTransfer.getData('text/html') || '').match(/<img[^>]+src="([^"]+)"/) || [])[1];
-  if (url) { try { const r = await fetch(url); const b = await r.blob(); if (b.type.startsWith('image/')) { addImages([[b, url.split('/').pop().split('?')[0]]], p); return; } } catch (err) {} tip(_t('Nie udało się pobrać obrazu z przeglądarki')); return; }
+  if (url) {
+    try {
+      // w programie pobiera proces główny (okno nie może przez CORS), w przeglądarce testowej zwykły fetch
+      const b = api.urlFetch ? await api.urlFetch(url).then(r => new Blob([r.bytes], { type: r.type })) : await (await fetch(url)).blob();
+      if (b.type.startsWith('image/')) { addImages([[b, url.split('/').pop().split('?')[0]]], p); return; }
+    } catch (err) {}
+    tip(_t('Nie udało się pobrać obrazu z przeglądarki')); return;
+  }
   const text = e.dataTransfer.getData('text/plain');
   if (text) addNote(p, text);
 });
@@ -709,10 +772,11 @@ function copySel() {
 }
 async function pasteClip(at, offset) {
   if (!clip || !clip.items.length) return false;
-  const items = clip.items.map(o => JSON.parse(JSON.stringify(o)));
+  const items = clip.items.map(o => JSON.parse(JSON.stringify(o))), target = board;
   // obrazy z innego blatu: kopiujemy ich pliki do bieżącego
   let missing = 0;
-  if (clip.board !== board.name) for (const o of items) if (o.img) for (const f of [o.img.full, o.img.thumb]) if (f && !(await api.imageCopy(clip.board, board.name, f))) missing++;
+  if (clip.board !== target.name) for (const o of items) if (o.img) for (const f of [o.img.full, o.img.thumb]) if (f && !(await api.imageCopy(clip.board, target.name, f))) missing++;
+  if (board !== target) return false;   // w trakcie przełączono blat: nie wklejamy do innego niż ten, na którym zaczęto
   lastPaste = { missing };
   if (missing) tip(_t('Nie znalazłem plików części obrazów — blat źródłowy usunięto albo przeniesiono'));
   snapshot();
@@ -753,7 +817,7 @@ main.addEventListener('pointermove', e => { lastPointer = { x: e.clientX, y: e.c
 
 /* ---------- klawiatura ---------- */
 function setTool(t) {
-  if (t === 'pen' && tool !== 'pen') tip(_t('Mazak: rysuj po obrazach · Shift prosta kreska · Esc kończy'));
+  if (t === 'pen' && tool !== 'pen') tip(_t('Mazak: rysuj po obrazach · Shift prosta kreska · Esc kończy').replace('Shift', SHIFT));
   tool = t; if (t !== 'pen') gum = false;
   for (const b of document.querySelectorAll('#tools .ib')) b.classList.toggle('on', b.dataset.tool === t);
   const on = $('#tools .ib.on'), ind = $('#tools .ind'); if (on && ind) ind.style.transform = 'translateX(' + on.offsetLeft + 'px)';
@@ -794,7 +858,7 @@ addEventListener('keydown', e => {
   else if (k.startsWith('arrow') && sel.size) {
     e.preventDefault(); snapshot();
     const s = e.shiftKey ? 50 : 5, dx = k === 'arrowleft' ? -s : k === 'arrowright' ? s : 0, dy = k === 'arrowup' ? -s : k === 'arrowdown' ? s : 0;
-    const ms = movingSet(); for (const id of ms) { const o = byId(id); o.x += dx; o.y += dy; drawItem(o); } reparent(ms); changed();
+    const ms = movingSet(); for (const id of ms) { const o = byId(id); o.x += dx; o.y += dy; drawItem(o); } reparent(ms); frameCounts(); changed();
   }
 });
 addEventListener('keyup', e => { if (e.key === ' ') { spaceDown = false; main.classList.remove('space'); } });
@@ -812,8 +876,8 @@ function showMenu(x, y, rows) {
     m.appendChild(b);
   }
   m.style.display = 'block';
-  const w = m.offsetWidth, h = m.offsetHeight;
-  m.style.left = Math.min(x, innerWidth - w - 8) + 'px'; m.style.top = Math.min(y, innerHeight - h - 8) + 'px';
+  const w = m.offsetWidth, h = Math.min(m.offsetHeight, innerHeight - 16);   // w niskim oknie menu się przewija (max-height w CSS)
+  m.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
 }
 function hideMenu() { $('#menu').style.display = 'none'; }
 addEventListener('pointerdown', e => { if (!e.target.closest('#menu')) hideMenu(); }, true);
@@ -865,21 +929,20 @@ function renderKeys() {
     [MOD + 'V', _t('wklej obraz albo tekst')], [MOD + 'C  ' + MOD + 'X', _t('kopiuj / wytnij elementy')], [MOD + 'D', _t('powiel zaznaczone')], [MOD + 'G', _t('ramka wokół zaznaczonych')],
     [isMac ? '⌘Z  ⇧⌘Z' : 'Ctrl+Z  Ctrl+Y', _t('cofnij / ponów')], [MOD + 'N', _t('nowy blat')],
     [MOD + 'A', _t('zaznacz wszystko')], [wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'), _t('przybliżanie')],
-    [_t('strzałki'), _t('przesuń zaznaczone') + ' (⇧ ×10)'], [isMac ? '⌫' : 'Delete', _t('usuń zaznaczone')],
+    [_t('strzałki'), _t('przesuń zaznaczone') + ' (' + SHIFT + ' ×10)'], [isMac ? '⌫' : 'Delete', _t('usuń zaznaczone')],
     [_t('wciśnięte kółko') + ' / ' + (isMac ? '⌥' : 'Alt') + ' + ' + _t('przeciąganie'), _t('przesuwanie płótna')], [FSK, _t('pełny ekran')],
   ];
   $('#keys').innerHTML = '<div class="kc"><div class="kh"><b>' + _t('Skróty klawiszowe') + '</b><span>' + _t('? otwiera tę ściągę · Esc zamyka') + '</span></div>'
     + row(0, [K('1', _t('100%')), K('0', _t('całość'))])
     + row(20, [K('E', _t('gumka')), K('T', _t('notatka')), K('P', _t('zawsze na wierzchu'))])
     + row(34, [K('A', _t('ułóż zaznaczone')), K('F', _t('ramka'))])
-    + row(54, [K('Z', _t('dopasuj zaznaczone')), K('V', _t('zaznaczanie') + '<em>Esc ' + _t('odznacz') + '</em>'), K('M', _t('mazak') + '<em>⇧ ' + _t('prosta kreska') + '</em>')])
+    + row(54, [K('Z', _t('dopasuj zaznaczone')), K('V', _t('zaznaczanie') + '<em>Esc ' + _t('odznacz') + '</em>'), K('M', _t('mazak') + '<em>' + SHIFT + ' ' + _t('prosta kreska') + '</em>')])
     + row(0, [K('Tab', _t('ukryj interfejs'), 'w'), K(_t('spacja'), _t('przytrzymaj i przeciągnij: przesuwanie płótna'), 'sp')])
     + '<div class="km">' + L.map(([k, t]) => '<div><kbd>' + k + '</kbd>' + t + '</div>').join('') + '</div></div>';
 }
 function toggleKeys(v) { const o = $('#keys'); v = v == null ? !keysOpen() : v; if (v) renderKeys(); o.classList.toggle('on', v); if (v) try { localStorage.setItem('blatSeenKeys', '1'); } catch (e) {} }
 function wheelTexts() { $('#zoomHint').textContent = wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'); if (keysOpen()) renderKeys(); }
-// ustawienia: kółko myszy, aktywowanie po najechaniu (Mac), wersja i aktualizacje
-// ustawienia: kółko myszy, aktywowanie po najechaniu, wersja i aktualizacje
+// ustawienia: motyw, skróty, kółko myszy, aktywowanie po najechaniu (Mac), wersja i aktualizacje
 let updState = null;
 function showSettings() {
   const r = $('#setBtn').getBoundingClientRect(), u = updState || {};
@@ -900,7 +963,7 @@ function showSettings() {
   if (u.state === 'available' || u.state === 'downloading') rows.push([_t('Zainstaluj wersję') + ' ' + u.version, () => api.updateInstall && api.updateInstall()]);
   else rows.push([_t('Sprawdź aktualizacje'), checkUpdates]);
   showMenu(r.left, r.bottom + 6, rows);
-  const m = $('#menu'); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
+  const m = $('#menu'); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px'; m.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 8)) + 'px';
 }
 async function checkUpdates() {
   if (!api.updateCheck) return;
@@ -949,7 +1012,7 @@ document.addEventListener('pointerover', e => {
 });
 document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.ib, #upd'); if (el && el === hintEl && !el.contains(e.relatedTarget)) hintHide(); });
 // opis zmieniony przez program (przypinka, motyw, pełny ekran…) też trafia do data-tip, bez systemowego dymka
-new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (!el.title) continue; el.dataset.tip = el.title; el.removeAttribute('title'); if (el === hintEl && $('#hint').classList.contains('on')) hintShow(el); } })
+new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (!el.title || !el.matches('.ib, #upd')) continue; el.dataset.tip = el.title; el.removeAttribute('title'); if (el === hintEl && $('#hint').classList.contains('on')) hintShow(el); } })
   .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['title'] });
 addEventListener('pointerdown', hintHide, true); addEventListener('wheel', hintHide, { passive: true });
 let onTop = false;
@@ -985,17 +1048,19 @@ function initUi() {
   $('#pillUi').innerHTML = IC.ui; $('#pillUi').onclick = e => { e.stopPropagation(); toggleBare(false); };
   $('#pillFs').innerHTML = IC.fs; $('#pillFs').onclick = e => { e.stopPropagation(); fullscreenToggle(); };
   let idleT = 0;
-  main.addEventListener('pointermove', e => { const g = $('#gumCur'), r = main.getBoundingClientRect(); g.style.left = (e.clientX - r.left) + 'px'; g.style.top = (e.clientY - r.top) + 'px'; }, { passive: true });
+  main.addEventListener('pointermove', e => { if (!gum) return; const g = $('#gumCur'), r = main.getBoundingClientRect(); g.style.left = (e.clientX - r.left) + 'px'; g.style.top = (e.clientY - r.top) + 'px'; }, { passive: true });
   addEventListener('mousemove', () => { document.body.classList.add('moving'); syncButtons(); clearTimeout(idleT); idleT = setTimeout(() => { document.body.classList.remove('moving'); syncButtons(); }, 2000); }, { passive: true });
   if (api.onFullscreen) api.onFullscreen(onFullscreen); else document.addEventListener('fullscreenchange', () => onFullscreen(!!document.fullscreenElement));
   setTool('select'); emptyTexts(); applyTheme(); pillTips();
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
-  addEventListener('beforeunload', () => { if (dirty) api.boardSave(board.name, board); });
+  // zamykanie okna (także przed instalacją aktualizacji): proces główny czeka, aż zapiszemy ostatnie zmiany i widok
+  const flush = () => { if (!board) return; clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; } return saveNow(); };
+  if (api.onFlush) api.onFlush(flush); else addEventListener('beforeunload', () => { if (dirty || viewT) api.boardSave(board.name, board); });
   // aktualizacje: dyskretna informacja w panelu bocznym
   if (api.onUpdateStatus) {
-    const show = s => { const b = $('#upd'); b.hidden = !(s && (s.state === 'available' || s.state === 'downloading' || s.state === 'ready'));
-      if (!b.hidden) b.textContent = s.state === 'available' ? _t('Nowa wersja') + ' ' + s.version : s.state === 'downloading' ? _t('Pobieram') + ' ' + (s.size ? Math.round(s.got / s.size * 100) + '%' : '') : _t('Instaluję…'); };
-    api.onUpdateStatus(s => { updState = s; show(s); }); api.updateGet().then(s => { updState = s; show(s); });
+    // opened: na Macu pobrany obraz dysku jest otwarty, resztę (przeciągnięcie do Programów) robi użytkownik
+    const show = s => { const b = $('#upd'); b.hidden = !(s && /^(available|downloading|ready|opened)$/.test(s.state));
+      if (!b.hidden) b.textContent = s.state === 'available' ? _t('Nowa wersja') + ' ' + s.version : s.state === 'downloading' ? _t('Pobieram') + ' ' + (s.size ? Math.round(s.got / s.size * 100) + '%' : '') : s.state === 'opened' ? _t('Przeciągnij Blat do Programów') : _t('Instaluję…'); };
+    api.onUpdateStatus(s => { const err = s && s.error && (!updState || updState.error !== s.error); updState = s; show(s); if (err) tip(_t('Nie udało się pobrać aktualizacji') + ': ' + s.error); }); api.updateGet().then(s => { updState = s; show(s); });
     $('#upd').onclick = () => api.updateInstall();
   }
 }
@@ -1005,7 +1070,8 @@ window.blatTest = {
   state: () => ({ board: board && board.name, items: board ? board.items.length : 0, sel: [...sel], view: board && { ...board.view }, tool, dirty, errors: errors.slice() }),
   items: () => JSON.parse(JSON.stringify(board.items)),
   // n sztucznych obrazów w kolorach — do testów i do sprawdzianu wydajności
-  async addTest(n = 4, w = 1600, h = 1000) {
+  async addTest(n = 4, w = 1600, h = 1000) { return (await addImages(await this.testBlobs(n, w, h))).map(i => i.id); },
+  async testBlobs(n = 4, w = 1600, h = 1000) {
     const out = [];
     for (let i = 0; i < n; i++) {
       const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
@@ -1013,7 +1079,7 @@ window.blatTest = {
       g.fillStyle = 'rgba(255,255,255,.6)'; g.font = Math.round(h / 4) + 'px sans-serif'; g.fillText(String(i + 1), w / 10, h / 2);
       out.push([await new Promise(r => c.toBlob(r, 'image/jpeg', 0.8)), 'test-' + (i + 1) + '.jpg']);
     }
-    return (await addImages(out)).map(i => i.id);
+    return out;
   },
   note: (x, y, text) => addNote({ x, y }, text).id,
   stroke: (pts, sw) => makeDrawing(pts, sw || penPx(penSt.c, penSt.w) / board.view.z, PENS[penSt.c][0], !!PENS[penSt.c][2]),
@@ -1025,6 +1091,13 @@ window.blatTest = {
   move: (dx, dy) => { snapshot(); const ms = movingSet(); for (const o of [...ms].map(byId)) { o.x += dx; o.y += dy; } reparent(ms); drawAll(); changed(); },
   frame: name => { frameAround(selItems()); const f = selItems()[0]; const inp = f && els.get(f.id).querySelector('input'); if (inp) { if (name) inp.value = name; inp.blur(); } return f && f.id; },
   bare: v => { toggleBare(v); return isBare(); },
+  tool: t => { if (t) setTool(t); return tool; },
+  top: v => { toggleTop(v); return onTop; },
+  theme: m => { if (m) setThemeMode(m); return themeMode(); },
+  reorder: d => reorder(d),
+  resize: (id, w) => { const it = byId(id); if (!it) return; snapshot(); const o = { x: it.x, y: it.y, w: it.w, h: it.h }, k = w / it.w; it.w = Math.round(w); if (it.type !== 'note') it.h = Math.round(it.h * k); if (it.type === 'image') followParent(it, o); drawAll(); changed(); },
+  rename: to => renameBoard(to),
+  trash: n => trashBoard(n || board.name),
   keys: v => { toggleKeys(v); return keysOpen(); },
   wheelMode: m => { if (m) setWheelMode(m); return wheelMode; },
   arrange, fit: () => fit(), zoom: f => zoomAt(f), undo: () => undo(false), redo: () => undo(true), remove: removeSel,
@@ -1074,7 +1147,7 @@ window.blatTest = {
     { const was = onTop, bg = () => { const c = getComputedStyle($('#topBtn'), '::before'); return c.content === 'none' ? getComputedStyle($('#topBtn')).backgroundColor : c.backgroundColor; };
       toggleTop(true); const on = bg(); toggleTop(false); const off = bg();
       ok(on === 'rgb(255, 107, 26)' && off !== on, 'przypięty przycisk pinezki jest pomarańczowy, odpięty nie');
-      toggleBare(true); toggleTop(true); const pm = $('#pinMark'); ok(pm && getComputedStyle(pm).display !== 'none', 'w trybie bez nawigacji przypięcie widać w rogu');
+      toggleBare(true); document.body.classList.remove('moving'); toggleTop(true); const pm = $('#pinMark'); ok(pm && getComputedStyle(pm).display !== 'none', 'w trybie bez nawigacji przypięcie widać w rogu');
       toggleTop(false); ok(!pm || getComputedStyle(pm).display === 'none', 'po odpięciu znak w rogu znika'); toggleBare(false); toggleTop(was); }
     // animacje „sprężyna” i reakcja porządkowania (prośba Michała 25.11.2026)
     { setTool('note'); const ind = $('#tools .ind'), on = $('#tools .ib[data-tool="note"]');
@@ -1121,7 +1194,7 @@ window.blatTest = {
         else {
           const p0 = this.pen(); this.pen({ c: 3, w: 2 });
           const hl = byId(this.stroke([[im.x + 30, im.y + 60], [im.x + 160, im.y + 62]]));
-          ok(hl && hl.hl === true && hl.c !== PEN && hl.sw > byId(this.stroke([[im.x + 30, im.y + 90], [im.x + 60, im.y + 92]])).sw * 0 + 0, 'zakreślacz zapisuje się jako półprzezroczysta kreska w swoim kolorze');
+          ok(hl && hl.hl === true && hl.c !== PEN && hl.sw > penPx(0, 2) / board.view.z * 1.5, 'zakreślacz zapisuje się jako półprzezroczysta kreska w swoim kolorze');
           this.pen({ c: 1, w: 0 }); const th = byId(this.stroke([[im.x + 30, im.y + 120], [im.x + 160, im.y + 122]]));
           ok(th && th.sw < hl.sw && th.c !== hl.c && !th.hl, 'cienka czarna kreska jest cieńsza od zakreślacza');
           sel = new Set([th.id]); this.pen({ c: 2 }); ok(byId(th.id).c === PENS[2][0], 'kolor zmienia się na zaznaczonej kresce');
@@ -1148,7 +1221,7 @@ window.blatTest = {
       await this.paste(); ok(board.items.length === nb && board.items.some(i => i.type === 'note' && i.text === cut.text), 'wklejenie wyciętej notatki');
       // wycięcie ramki zabiera też jej zawartość (uwaga recenzenta)
       { const f = board.items.find(i => i.type === 'frame'); if (f) { const inside0 = board.items.filter(o => o.type !== 'frame' && inside(o, f)).map(o => o.id); const nb2 = board.items.length;
-          sel = new Set([f.id]); this.cut(); ok(!byId(f.id) && inside0.every(id => !byId(id)) && board.items.length === nb2 - 1 - inside0.length - board.items.filter(() => false).length, 'wycięcie ramki zabiera jej zawartość');
+          sel = new Set([f.id]); this.cut(); ok(!byId(f.id) && inside0.every(id => !byId(id)) && board.items.length === nb2 - 1 - inside0.length, 'wycięcie ramki zabiera jej zawartość');
           this.undo(); ok(byId(f.id) && inside0.every(id => byId(id)), 'cofnięcie wycięcia ramki'); } }
       // tekst ze schowka z końcami wierszy Windows nadal rozpoznany jako nasza kopia
       { sel = new Set([cut.id]); const t = this.copy(); ok(isOurClip(t.replace(/\n/g, '\r\n')), 'kopia rozpoznana także z końcami wierszy Windows'); }
@@ -1182,6 +1255,74 @@ window.blatTest = {
       ok(!$('#hint').classList.contains('on'), 'opis nie pojawia się przed upływem 1,5 s'); await new Promise(r => setTimeout(r, 900));
       const h = $('#hint'); ok(h && h.classList.contains('on') && h.textContent.includes(_t('Mazak')) && !b.title, 'po zatrzymaniu kursora na narzędziu pojawia się jego opis');
       b.dispatchEvent(new PointerEvent('pointerout', { bubbles: true })); await new Promise(r => setTimeout(r, 50)); ok(h && !h.classList.contains('on'), 'opis znika po zjechaniu z narzędzia'); }
+    // ===== audyt 27.11.2026 =====
+    // pełny obraz tylko dla obrazów na ekranie (albo tuż obok), reszta zostaje przy miniaturze
+    { const far = await this.addTest(2, 1600, 1000); const [a, b] = far.map(byId); b.x = a.x + 20000; drawAll();
+      fit([a]); zoomAt(3); await new Promise(r => setTimeout(r, 250));
+      const src = it => els.get(it.id).firstChild.getAttribute('src');
+      ok(src(a) === api.imageUrl(board.name, a.img.full), 'obraz na ekranie po przybliżeniu dostaje pełny plik');
+      ok(src(b) === api.imageUrl(board.name, b.img.thumb), 'obraz daleko poza ekranem zostaje przy miniaturze');
+      sel = new Set(far); removeSel(); fit(); }
+    // nieudany zapis (np. odrzucona podmiana pliku na Windows) ponawia się sam
+    const eN = errors.length;   // błędy wywołane celowo (EPERM, zapis blatu z kosza) zdejmujemy po tych przypadkach
+    { api._failSave = 1; const n0 = byId(this.note(0, -600, 'zapis z ponowieniem')); await this.save(); clearTimeout(viewT);
+      ok(dirty && $('#saved').textContent === _t('nie udało się zapisać'), 'nieudany zapis zostaje oznaczony');
+      await new Promise(r => setTimeout(r, 2300)); const back = await api.boardLoad(board.name); api._failSave = 0;
+      ok(!dirty && back && back.items.some(i => i.id === n0.id), 'nieudany zapis ponawia się bez kolejnej zmiany'); }
+    // dwa zapisy naraz nie mieszają się, a po nich w pliku jest ostatni stan
+    { const nn = byId(this.note(0, -700, 'pierwszy')); dirty = true; const p1 = saveNow(); nn.text = 'drugi'; dirty = true; const p2 = saveNow(); await Promise.all([p1, p2]);
+      const back = await api.boardLoad(board.name); ok(back.items.find(i => i.id === nn.id).text === 'drugi', 'dwa zapisy pod rząd: w pliku zostaje ostatni stan'); }
+    // import kilku obrazów przerwany przełączeniem blatu nie miesza plików między blatami
+    { const src = board.name, other = await this.newBoard('Przełączanie ' + Date.now()); await this.open(src);
+      const n0 = board.items.length, bl = await this.testBlobs(3, 900, 600), pr = addImages(bl); await this.open(other); await pr; await new Promise(r => setTimeout(r, 100));
+      ok(board.name === other && !board.items.some(i => i.type === 'image'), 'obrazy importowane w tle nie trafiają do blatu, na który przełączono');
+      await this.open(src); const imgs = board.items.filter(i => i.type === 'image');
+      ok(board.items.length === n0 + 3 && imgs.every(i => api.imageUrl(src, i.img.full)), 'obrazy trafiają do blatu, na którym zaczął się import, razem z plikami');
+      await api.boardTrash(other); await refreshBoards(); }
+    // zapis blatu przeniesionego do kosza nie odtwarza go
+    { const t = await this.newBoard('Kosz ' + Date.now()); this.note(0, 0, 'x'); await api.boardTrash(t); dirty = true; await saveNow(); const r = await api.boardsList();
+      ok(!r.boards.some(b => b.name === t), 'zapis blatu z kosza nie tworzy go na nowo'); await this.open(name); }
+    errors.splice(eN, errors.length - eN, ...errors.slice(eN).filter(m => !/EPERM|nie istnieje/.test(m)));
+    // menu kontekstowe w niskim oknie mieści się w oknie i nie wchodzi pod pasek okna
+    { showMenu(20, 4, Array.from({ length: 60 }, (_, i) => ['Pozycja ' + i, () => {}])); const r = $('#menu').getBoundingClientRect();
+      ok(r.top >= 8 && r.bottom <= innerHeight, 'długie menu mieści się w oknie'); ok(getComputedStyle($('#menu')).getPropertyValue('-webkit-app-region') === 'no-drag', 'menu nie jest obszarem przeciągania okna'); hideMenu(); }
+    // podpowiedzi przy nazwie blatu i ścieżce folderu zostają (systemowe), bo nie są przyciskami
+    ok(!!$('#bname').title && !!$('#where').title, 'nazwa blatu i ścieżka folderu mają podpowiedź');
+    // usunięcie wyczyszczonej notatki ma własny krok cofania
+    { const nn = byId(this.note(300, -500, 'do wyczyszczenia')); sel = new Set([nn.id]); this.move(50, 0); const x1 = nn.x;
+      editNote(nn); els.get(nn.id).textContent = ''; els.get(nn.id).blur(); ok(!byId(nn.id), 'wyczyszczona notatka znika');
+      this.undo(); const back = byId(nn.id); ok(back && back.x === x1 && back.text === 'do wyczyszczenia', 'cofnięcie przywraca notatkę bez cofania wcześniejszej zmiany');
+      sel = new Set([nn.id]); removeSel(); }
+    // licznik w ramce odświeża się po przesunięciu strzałkami
+    { const f = board.items.find(i => i.type === 'frame'), o = f && board.items.find(i => i.type === 'image' && inside(i, f));
+      if (f && o) { sel = new Set([o.id]); for (let i = 0; i < 40; i++) dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true }));
+        const n = board.items.filter(x => x.type !== 'frame' && x.type !== 'drawing' && inside(x, f)).length;
+        ok(els.get(f.id).querySelector('span').textContent === (n ? n + ' ' + plural(n, 'element', 'elementy', 'elementów') : ''), 'licznik ramki po przesunięciu strzałkami');
+        this.undo(); sel.clear(); drawAll(); } else ok(false, 'licznik ramki: brak ramki z obrazem'); }
+    // dwuklik z mazakiem nie tworzy notatki
+    { setTool('pen'); const n0 = board.items.length, r = main.getBoundingClientRect();
+      main.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: r.left + 5, clientY: r.bottom - 5 }));
+      ok(board.items.length === n0, 'dwuklik z mazakiem nie tworzy notatki'); setTool('select'); }
+    // samo kliknięcie w uchwyt zmiany rozmiaru nie dodaje kroku cofania
+    { const im = board.items.find(i => i.type === 'image'); sel = new Set([im.id]); drawAll(); const u0 = undoStack.length, hd = els.get(im.id).querySelector('.hd'), r = hd.getBoundingClientRect();
+      hd.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, buttons: 1, clientX: r.left + 3, clientY: r.top + 3, pointerId: 1 }));
+      main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: r.left + 3, clientY: r.top + 3, pointerId: 1 }));
+      ok(undoStack.length === u0, 'kliknięcie w uchwyt bez przeciągania nie dodaje kroku cofania'); sel.clear(); drawAll(); }
+    // notatka przyjmuje wklejany tekst bez formatowania
+    { const nn = byId(this.note(0, -800, 'x')); ok(/plaintext-only/.test(els.get(nn.id).getAttribute('contenteditable') || '') || (editNote(nn), els.get(nn.id).contentEditable === 'plaintext-only'), 'notatka przy edycji przyjmuje tylko czysty tekst'); els.get(nn.id).blur(); }
+    // skróty w menu zgodne z systemem
+    { const im = board.items.find(i => i.type === 'image'); sel = new Set([im.id]); drawAll(); const r = els.get(im.id).getBoundingClientRect();
+      main.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 5, clientY: r.top + 5 }));
+      const t = $('#menu').innerText; ok(isMac ? t.includes('⌫') && !t.includes('Del') : t.includes('Delete'), 'skrót usuwania w menu zgodny z systemem'); hideMenu(); sel.clear(); drawAll(); }
+    { renderKeys(); const t = $('#keys').innerText; ok(isMac || !t.includes('⇧'), 'ściąga na Windows pisze Shift, nie ⇧'); }
+    // w trybie bez nawigacji pastylka, gdy jej nie widać, nie blokuje przeciągania okna
+    { toggleBare(true); document.body.classList.remove('moving'); ok(getComputedStyle($('#fspill')).getPropertyValue('-webkit-app-region') !== 'no-drag', 'niewidoczna pastylka nie blokuje przeciągania okna'); toggleBare(false); }
+    // polecenia testowe dla funkcji bez myszy: zmiana nazwy, kolejność warstw, narzędzie, motyw, rozmiar
+    { const t = await this.newBoard('Nazwa ' + Date.now()); const n2 = await this.rename(t + ' b'); ok(n2 === t + ' b' && board.name === n2 && (await api.boardsList()).boards.some(x => x.name === n2), 'zmiana nazwy blatu');
+      const a = byId(this.note(0, 0, 'a')), c = byId(this.note(10, 10, 'c')); sel = new Set([a.id]); this.reorder(1); ok((a.z || 0) > (c.z || 0), 'na wierzch'); this.reorder(-1); ok((a.z || 0) < (c.z || 0), 'na spód');
+      ok(this.tool('pen') === 'pen' && this.tool('select') === 'select', 'wybór narzędzia');
+      const im = byId((await this.addTest(1, 800, 400))[0]), w0 = im.w; this.resize(im.id, w0 * 2); ok(im.w === w0 * 2 && Math.abs(im.w / im.h - 2) < .02, 'zmiana rozmiaru obrazu z zachowaniem proporcji'); this.undo(); ok(byId(im.id).w === w0, 'cofnięcie zmiany rozmiaru');
+      await this.trash(); ok(!(await api.boardsList()).boards.some(x => x.name === n2), 'przeniesienie blatu do kosza'); await this.open(name); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();

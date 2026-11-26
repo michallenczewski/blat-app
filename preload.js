@@ -1,5 +1,5 @@
 // Blat — most między oknem a procesem głównym. Wersja przeglądarkowa (do testów) ma ten sam zestaw w renderer/web-api.js.
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
   web: false,
@@ -14,8 +14,9 @@ contextBridge.exposeInMainWorld('api', {
   imageCopy: (from, to, file) => ipcRenderer.invoke('image-copy', from, to, file),
   imagesPrune: (n, keep) => ipcRenderer.invoke('images-prune', n, keep),
   imageUrl: (n, file) => 'blat://b/' + encodeURIComponent(n) + '/' + encodeURIComponent(file),
-  filePath: f => { try { return webUtils.getPathForFile(f); } catch (e) { return ''; } },
-  fileRead: p => ipcRenderer.invoke('file-read', p),
+  urlFetch: u => ipcRenderer.invoke('url-fetch', u),
+  // zamykanie okna: proces główny prosi o zapis ostatnich zmian i czeka na potwierdzenie
+  onFlush: cb => ipcRenderer.on('flush', (e, id) => Promise.resolve(cb()).catch(() => {}).then(() => ipcRenderer.send('flushed', id))),
   setOnTop: v => ipcRenderer.send('on-top', v),
   setSide: v => ipcRenderer.send('side', v),
   uiState: () => ipcRenderer.invoke('ui-state'),

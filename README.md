@@ -21,10 +21,21 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | Tab | Tab | tryb bez nawigacji: samo płótno, bez paska i listy blatów |
 | ⌃⌘F | Ctrl+spacja | pełny ekran (Esc wychodzi) |
 | ? | ? | ściąga ze wszystkimi skrótami |
-| M | M | mazak: rysowanie po obrazach (Shift: prosta kreska, Esc kończy) |
+| M (⇧: prosta kreska) | M (Shift: prosta kreska) | mazak: rysowanie po obrazach (Esc kończy) |
 | E | E | gumka do kresek mazaka (usuwa całe kreski) |
 | ⌘C / ⌘X / ⌘V | Ctrl+C / Ctrl+X / Ctrl+V | kopiuj, wytnij, wklej elementy (także na inny blat) |
 | ⌘D | Ctrl+D | powiel zaznaczone |
+| ⌘A | Ctrl+A | zaznacz wszystko |
+| ⌫ | Delete | usuń zaznaczone |
+| strzałki (⇧: ×10) | strzałki (Shift: ×10) | przesuń zaznaczone |
+| ⌘Z / ⇧⌘Z | Ctrl+Z / Ctrl+Y | cofnij / ponów |
+| ⌘+ / ⌘− | Ctrl++ / Ctrl+− | przybliż / oddal |
+| ⌘N | Ctrl+N | nowy blat |
+| ⌘S | Ctrl+S | zapisz od razu (Blat i tak zapisuje się sam) |
+
+## Pierwsze uruchomienie na Macu
+
+Blat nie ma podpisu Apple Developer, więc przy pierwszym uruchomieniu macOS go zatrzyma. Wtedy w Finderze kliknij Blat w Programach z wciśniętym ⌃ (albo prawym przyciskiem), wybierz „Otwórz” i potwierdź. Jeśli macOS nie pokazuje tej możliwości, otwórz Ustawienia systemowe → Prywatność i ochrona i kliknij „Otwórz mimo to” przy Blacie. Wystarczy raz; aktualizacje otwierają się już normalnie.
 
 ## Rozwój
 

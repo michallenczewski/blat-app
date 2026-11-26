@@ -25,7 +25,7 @@ Blat to lekka tablica na referencje i szkice koncepcji, samodzielny program w j�
 - Tablica to folder `<Nazwa>.blat` z plikiem `board.json` i katalogiem `img/`. Autozapis zapisuje tylko JSON, atomowo (plik tymczasowy, potem zmiana nazwy). Obrazów nie przepisujemy przy zapisie.
 - Nazwy typów elementów (`image`, `note`, `frame`, później `arrow`, `drawing`) są wspólne z Blatem w przeglądarce. Nie zmieniaj ich.
 - Każdy napis w interfejsie przechodzi przez `_t('…')` z polskim kluczem i ma tłumaczenie w `renderer/lang/en.js`.
-- Obraz trzymamy w dwóch stopniach: pełny (najwyżej 4096 px) i miniatura (768 px). Pełny wczytujemy dopiero wtedy, gdy obraz na ekranie jest większy niż 720 px.
+- Obraz trzymamy w dwóch stopniach: pełny (najwyżej 4096 px) i miniatura (768 px). Pełny wczytujemy dopiero wtedy, gdy obraz na ekranie jest większy niż 720 px fizycznych (na Retinie 360 px CSS) i leży na ekranie albo tuż obok.
 - Program sam sprawdza nowe wersje w wydaniach GitHuba (`releases/latest`) i szuka pliku `Blat-<wersja>-win-x64.exe` albo `Blat-<wersja>-mac-<arm64|x64>.dmg`. Nie zmieniaj tych nazw ani nie oznaczaj wydań jako szkic czy wersja wstępna.
 - Każda funkcja, którą da się sprawdzić bez myszy, ma polecenie w `window.blatTest`.
 

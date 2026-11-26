@@ -2,18 +2,18 @@
 
 ## Pliki
 
-- `main.js` — proces główny Electrona: okno, ustawienia (`ustawienia.json` w danych programu), zapis i odczyt tablic, protokół `blat://`, sprawdzanie aktualizacji.
+- `main.js` — proces główny Electrona: okno, menu, ustawienia (`ustawienia.json` w danych programu), zapis i odczyt blatów, protokół `blat://`, pobieranie obrazów przeciągniętych z przeglądarki, sprawdzanie aktualizacji.
 - `preload.js` — most `window.api` między oknem a procesem głównym.
 - `renderer/index.html` — układ i style (zmienne kolorów jak w Gapie, jasny i ciemny motyw).
 - `renderer/app.js` — tablica: rysowanie, narzędzia, zaznaczanie, cofanie, przyjmowanie obrazów, skróty, `window.blatTest`.
 - `renderer/i18n.js`, `renderer/lang/en.js` — napisy (polski jest kluczem, angielski w słowniku).
 - `renderer/web-api.js` — zastępczy `api` w pamięci, działa tylko w przeglądarce (do testów).
 - `scripts/serve.mjs` — serwer do testów w przeglądarce; `scripts/tlumaczenia.mjs` — sprawdzenie słownika.
-- `build/` — ikony i podpisywanie ad hoc na Macu; `.github/workflows/build.yml` — budowanie instalatorów na żądanie.
+- `build/` — ikony i podpisywanie ad hoc na Macu; `.github/workflows/build.yml` — budowanie instalatorów na żądanie (wydanie tworzy zadanie `check`, a zadania dla Maca i Windows tylko dokładają do niego pliki); `.github/workflows/lockfile.yml` — odświeża `package-lock.json` i wypycha go od razu na `main` (w rozmowach z asystentem często nie ma sieci).
 
 ## Tryb bez nawigacji i pełny ekran
 
-Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tablic. Na Macu płótno sięga samej góry okna: przyciski okna pokazują się nad nim tylko przy ruchu myszy (`setWindowButtonVisibility`), a okno przesuwa się za niewidoczny pas 28 px przy górnej krawędzi. Na Windows zostaje pasek 36 px na systemowe przyciski okna. Pełny ekran (⌃⌘F, Ctrl+spacja) włączony z programu od razu chowa interfejs, a po wyjściu przywraca poprzedni stan. Pastylka w prawym górnym rogu pojawia się przy ruchu myszy. Widok przesuwamy o różnicę położenia płótna, żeby obrazy nie przeskakiwały.
+Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tablic. Na Macu płótno sięga samej góry okna: przyciski okna pokazują się nad nim tylko przy ruchu myszy (`setWindowButtonVisibility`), a okno przesuwa się za niewidoczny pas 28 px przy górnej krawędzi. Na Windows zostaje pasek 32 px na systemowe przyciski okna. Pełny ekran (⌃⌘F, Ctrl+spacja) włączony z programu od razu chowa interfejs, a po wyjściu przywraca poprzedni stan. Pastylka w prawym górnym rogu pojawia się przy ruchu myszy. Widok przesuwamy o różnicę położenia płótna, żeby obrazy nie przeskakiwały.
 
 ## Mazak (element „drawing”)
 
@@ -29,27 +29,40 @@ Tablice leżą w `Dokumenty/Blat/`. Każda to folder `<Nazwa>.blat`:
 
 ```
 board.json   { v:1, name, items:[…], view:{x,y,z}, modified }
-img/         <id>.<ext> (pełny obraz) i <id>.t.webp (miniatura)
+board.json.bak   poprzednia wersja (gdy board.json jest uszkodzony, wczytujemy ją)
+img/         <id>.<ext> (pełny obraz) i <id>-m.webp (miniatura, gdy obraz ma więcej niż 768 px)
 ```
 
-Element ma `id, type, x, y, w, h, z` oraz zależnie od typu `img:{full, thumb, w, h, src}`, `text` albo `name`. Usunięte obrazy sprzątamy z `img/` przy otwieraniu tablicy (`images-prune`), żeby cofnięcie w trakcie pracy wciąż miało pliki.
+Element ma `id, type, x, y, w, h, z` oraz zależnie od typu `img:{full, thumb, w, h, src}`, `text` albo `name`. Usunięte obrazy sprzątamy z `img/`, gdy okno przechodzi do innego blatu (`images-prune`), a nie przy każdym usunięciu, żeby cofnięcie w trakcie pracy wciąż miało pliki. Zostają też pliki obrazów w schowku (wycięte) i pliki właśnie zapisywane przez trwający import.
+
+### Zapis
+
+Autozapis wysyła sam JSON. Proces główny zapisuje go do pliku tymczasowego o niepowtarzalnej nazwie, robi `fsync`, odkłada poprzednią wersję jako `board.json.bak` i podmienia plik. Zapisy jednego blatu idą w kolejce, nigdy dwa naraz. Na Windows podmiana bywa chwilowo odrzucana (OneDrive, antywirus) — wtedy kilka prób, a nieudany zapis okno ponawia samo po 2 s. Zapis nie tworzy folderu blatu: blat przeniesiony do kosza nie wraca. Przy zamykaniu okna (także przed instalacją aktualizacji) proces główny prosi okno o zapis ostatnich zmian i widoku i czeka na potwierdzenie, najwyżej 3 s. Import kilku obrazów kończy się zawsze w blacie, na którym się zaczął, nawet jeśli w trakcie przełączono blat.
 
 Folder zamiast jednego pliku pozwala zapisywać po każdej zmianie sam lekki JSON. Wysłanie tablicy komuś to spakowanie folderu.
 
 ## Rysowanie
 
-Każdy element to zwykły `div` w warstwie przesuwanej transformacją (`translate` i `scale`). Przesuwanie i przybliżanie zmienia jedną transformację, więc nie przerysowuje elementów. Po zatrzymaniu przybliżania podmieniamy miniatury na pełne obrazy tam, gdzie obraz na ekranie przekracza 720 px.
+Każdy element to zwykły `div` w warstwie przesuwanej transformacją (`translate` i `scale`). Przesuwanie i przybliżanie zmienia jedną transformację, więc nie przerysowuje elementów. Po zatrzymaniu przybliżania albo przesuwania podmieniamy miniatury na pełne obrazy tam, gdzie obraz na ekranie przekracza 720 px **fizycznych** (na ekranie Retina to już 360 px CSS), ale tylko dla obrazów na ekranie albo w pasie pół ekranu wokół niego; obrazy dalej wracają do miniatury.
 
 Cofanie trzyma migawki listy elementów (do 120 kroków). To proste i wystarcza, dopóki tablice mają setki, a nie dziesiątki tysięcy elementów.
 
 ## Przyjmowanie obrazów
 
 - Przeciągnięcie plików z dysku, z Gapy albo z Findera i Eksploratora.
-- Przeciągnięcie obrazu z przeglądarki (adres pobierany przez `fetch`).
+- Przeciągnięcie obrazu z przeglądarki (adres pobiera proces główny przez `net.fetch`, bo okno blokuje CORS; tylko obrazy, do 100 MB).
 - Wklejanie ze schowka.
 - Później: wysłanie widoku z Modo i z Gapy bez przeciągania.
 
 Duże obrazy zmniejszamy do 4096 px i zapisujemy jako WebP; mniejsze JPG, PNG, WebP i GIF zostają w oryginale.
+
+## Bezpieczeństwo okna
+
+Okno działa w piaskownicy (`sandbox`, `contextIsolation`, bez `nodeIntegration`) i widzi tylko `window.api` z `preload.js`. Nie ma wywołania, które czytałoby dowolny plik: obrazy z dysku przychodzą przez przeciągnięcie (`File` w oknie), a nazwy blatów i plików obrazów są oczyszczane, więc nie wychodzą poza folder blatów. Zamiast domyślnego menu Electrona jest własne (na Macu: program, Edycja, Okno; na Windows żadne), więc nie ma przeładowania okna ⌘R / Ctrl+R ani narzędzi deweloperskich. Aktualizacja uruchamia instalator dopiero po sprawdzeniu rozmiaru i sumy SHA-256 z wydania GitHuba.
+
+## Licencje
+
+Blat ma licencję MIT. Wszystkie zależności służą tylko do budowania i nie trafiają do programu. Trzy pośrednie zależności electron-buildera (`sanitize-filename`, `truncate-utf8-bytes`, `utf8-byte-length`) mają licencję WTFPL lub WTFPL/ISC — z MIT nie ma konfliktu.
 
 ## Wspólne z Gapą i Modo
 
