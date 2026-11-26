@@ -93,6 +93,7 @@ ipcMain.handle('boards-list', async () => {
 ipcMain.handle('board-load', (e, name) => queued(boardPath(name), async () => {
   try {
     const j = await readBoard(boardPath(name));
+    j.name = name;   // nazwa folderu jest prawdą (board.json mógł nie zdążyć dostać nowej nazwy po jej zmianie)
     settings.last = name; saveSettings();
     return j;
   } catch (err) { return null; }
@@ -220,15 +221,16 @@ async function updInstall() {
   const file = path.join(isMac ? app.getPath('downloads') : app.getPath('temp'), upd.name);
   upd.state = 'downloading'; upd.got = 0; delete upd.error; tellAll('update-status', upd);
   // pobieranie przerywamy, gdy przez 30 s nie przyszedł żaden bajt (zawieszone połączenie)
-  const ac = new AbortController(); let lastGot = -1;
-  const stall = setInterval(() => { if (upd.got === lastGot) ac.abort(); lastGot = upd.got; }, 30000);
+  const ac = new AbortController(); let lastByte = Date.now(), diskErr = false;
+  const stall = setInterval(() => { if (Date.now() - lastByte > 30000) ac.abort(); }, 5000);
   try {
     let r; try { r = await net.fetch(upd.url, { headers: { 'User-Agent': 'Blat' }, signal: ac.signal }); } catch (err) { throw codeErr('network', err.message); }
     if (!r.ok || !r.body) throw codeErr('network', 'HTTP ' + r.status);
     const hash = crypto.createHash('sha256'); let last = 0;
     const src = Readable.fromWeb(r.body);
-    src.on('data', c => { hash.update(c); upd.got += c.length; if (Date.now() - last > 400) { last = Date.now(); tellAll('update-status', upd); } });
-    try { await pipeline(src, fs.createWriteStream(file + '.part')); } catch (err) { throw codeErr(ac.signal.aborted || !/^E[A-Z]+$/.test(err.code || '') ? 'network' : 'disk', err.message); }
+    src.on('data', c => { lastByte = Date.now(); hash.update(c); upd.got += c.length; if (Date.now() - last > 400) { last = Date.now(); tellAll('update-status', upd); } });
+    const out = fs.createWriteStream(file + '.part'); out.on('error', () => { diskErr = true; });   // błąd zapisu pliku = dysk, każdy inny = sieć
+    try { await pipeline(src, out); } catch (err) { throw codeErr(diskErr ? 'disk' : 'network', err.message); }
     // instalator uruchamiamy tylko wtedy, gdy przyszedł cały i niezmieniony (gdy wydanie nie ma sumy SHA-256, sprawdzamy sam rozmiar)
     if (upd.size && upd.got !== upd.size) throw codeErr('incomplete');
     if (upd.sha256 && hash.digest('hex') !== upd.sha256) throw codeErr('checksum');
@@ -239,7 +241,7 @@ async function updInstall() {
   if (isWin) {
     upd.state = 'ready'; tellAll('update-status', upd);
     // przed wyjściem okna zapisują ostatnie zmiany; jeśli zapis się nie uda, nie instalujemy (zmiany zostają w oknie)
-    if (!(await flushAll())) { upd.state = 'available'; upd.error = 'save'; tellAll('update-status', upd); return false; }
+    if (!(await flushAll('update'))) { upd.state = 'available'; upd.error = 'save'; tellAll('update-status', upd); return false; }
     spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref(); quitNow();
   } else if (isMac) { upd.state = 'opened'; upd.file = file; tellAll('update-status', upd); shell.openPath(file); }
   return true;
@@ -251,19 +253,21 @@ ipcMain.handle('update-install', () => updInstall());
 /* ---------- zapis przy zamykaniu ---------- */
 // Okno zamyka się dopiero, gdy potwierdzi zapis ostatnich zmian (bez odpowiedzi — najwyżej po 3 s).
 // Gdy zapis się nie udał, okno zostaje otwarte i mówi o tym; drugie zamknięcie zamyka już bez zapisu.
-let quitting = false, saveFailed = false;
-function flushWin(w) {
+// „Drugie zamknięcie bez zapisu” obowiązuje tylko chwilę po porażce (AGAIN ms); później okno znów jest pytane o zapis.
+let quitting = false, quitPending = false, quitFailedAt = 0;
+const AGAIN = 20000, recent = t => t && Date.now() - t < AGAIN;
+function flushWin(w, reason) {
   if (w.isDestroyed()) return Promise.resolve(true);
   return new Promise(res => {
     const id = Math.random().toString(36).slice(2), t = setTimeout(() => done(true), 3000);
     function done(ok) { clearTimeout(t); ipcMain.removeListener('flushed', on); res(ok); }
     function on(e, got, ok) { if (got === id) done(ok !== false); }
-    ipcMain.on('flushed', on); w.webContents.send('flush', id);
+    ipcMain.on('flushed', on); w.webContents.send('flush', id, reason || 'close');
   });
 }
-const flushAll = async () => (await Promise.all(BrowserWindow.getAllWindows().map(flushWin))).every(Boolean);
+const flushAll = async reason => (await Promise.all(BrowserWindow.getAllWindows().map(w => flushWin(w, reason)))).every(Boolean);
 // wyjście z programu bez ponownego pytania okien o zapis
-function quitNow() { quitting = true; for (const w of BrowserWindow.getAllWindows()) w.flushed = true; saveSettings(true); app.quit(); }
+function quitNow() { quitting = true; for (const w of BrowserWindow.getAllWindows()) w.allowClose = true; saveSettings(true); app.quit(); }
 
 /* ---------- menu ---------- */
 // bez domyślnego menu Electrona: nie ma przeładowania okna (⌘R / Ctrl+R kasowałoby historię cofania) ani narzędzi deweloperskich
@@ -301,9 +305,13 @@ function createWindow() {
   const remember = () => { if (!win.isMaximized() && !win.isMinimized()) settings.bounds = win.getBounds(); settings.maximized = win.isMaximized(); saveSettings(); };
   win.on('resize', remember); win.on('move', remember);
   win.on('close', e => {
-    if (win.flushed) return;
-    e.preventDefault(); win.flushed = true;
-    flushWin(win).then(ok => { saveSettings(true); if (ok && !win.isDestroyed()) win.close(); });
+    if (win.allowClose || recent(win.failedAt)) return;   // zapis już potwierdzony albo drugie zamknięcie zaraz po porażce
+    e.preventDefault();
+    if (win.flushing) return; win.flushing = true;
+    flushWin(win).then(ok => {
+      win.flushing = false; saveSettings(true);
+      if (ok) { win.allowClose = true; if (!win.isDestroyed()) win.close(); } else win.failedAt = Date.now();
+    });
   });
   win.on('enter-full-screen', () => win.webContents.send('fullscreen', true));
   win.on('leave-full-screen', () => win.webContents.send('fullscreen', false));
@@ -336,8 +344,9 @@ else {
   // (Zatrzymanie zamykania w samym „close” Electron traktuje jak odmowę wyjścia — dlatego tutaj.)
   app.on('before-quit', e => {
     if (quitting) return;
-    e.preventDefault(); quitting = true;
-    if (saveFailed) { quitNow(); return; }   // drugie ⌘Q po nieudanym zapisie: wychodzimy mimo to
-    flushAll().then(ok => { if (ok) quitNow(); else { quitting = false; saveFailed = true; for (const w of BrowserWindow.getAllWindows()) w.flushed = true; } });
+    if (recent(quitFailedAt)) { quitNow(); return; }   // drugie ⌘Q zaraz po nieudanym zapisie: wychodzimy mimo to
+    e.preventDefault();
+    if (quitPending) return; quitPending = true;
+    flushAll('quit').then(ok => { quitPending = false; if (ok) quitNow(); else quitFailedAt = Date.now(); });
   });
 }

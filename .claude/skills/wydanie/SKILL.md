@@ -14,3 +14,5 @@ Wydajemy **tylko wtedy, gdy Michał o to poprosi**. Zwykłe poprawki commitujemy
    (`win` albo `mac`, jeśli Michał potrzebuje tylko jednego systemu).
 4. Poczekaj na koniec (`gh run list -R michallenczewski/blat-app -L 1`). Workflow tworzy wydanie „Blat <wersja>” z plikami `Blat-<wersja>-win-x64.exe` i `Blat-<wersja>-mac-<arm64|x64>.dmg`, a dla Maca także `Blat-<wersja>-mac-<arm64|x64>.zip` (sam program, bez obrazu dysku). Nie zmieniaj tych nazw i nie oznaczaj wydania jako szkic ani wersja wstępna, bo program przestanie znajdować aktualizacje.
 5. Jeśli Michał chce instalator od razu: pobierz plik z wydania przez `gh api -H "Accept: application/octet-stream" repos/michallenczewski/blat-app/releases/assets/<id>`, wyślij go w rozmowie, a na komputer z Windows zapisz do `Pobrane`.
+
+Uwaga: wydanie dostaje oznaczenie „latest” (programy widzą je przy sprawdzaniu aktualizacji) dopiero wtedy, gdy są w nim instalatory dla Windows i obu Maców. Przy budowaniu jednego systemu (`os=mac` albo `os=win`) nowa wersja zostaje niewidoczna dla programów, dopóki nie zbuduje się drugi system.

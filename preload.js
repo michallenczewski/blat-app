@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   imageUrl: (n, file) => 'blat://b/' + encodeURIComponent(n) + '/' + encodeURIComponent(file),
   urlFetch: u => ipcRenderer.invoke('url-fetch', u),
   // zamykanie okna: proces główny prosi o zapis ostatnich zmian i czeka na potwierdzenie
-  onFlush: cb => ipcRenderer.on('flush', (e, id) => Promise.resolve().then(cb).then(ok => ipcRenderer.send('flushed', id, ok !== false), () => ipcRenderer.send('flushed', id, false))),
+  onFlush: cb => ipcRenderer.on('flush', (e, id, reason) => Promise.resolve(reason).then(cb).then(ok => ipcRenderer.send('flushed', id, ok !== false), () => ipcRenderer.send('flushed', id, false))),
   setOnTop: v => ipcRenderer.send('on-top', v),
   setSide: v => ipcRenderer.send('side', v),
   uiState: () => ipcRenderer.invoke('ui-state'),

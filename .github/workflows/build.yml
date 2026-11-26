@@ -81,11 +81,18 @@ jobs:
           gh release upload "v${{ needs.check.outputs.version }}" "${files[@]}" --clobber -R "${{ github.repository }}"
 
   # wydanie staje się „latest” (to widzą programy przy sprawdzaniu aktualizacji) dopiero, gdy wszystkie instalatory są na miejscu;
-  # jeśli któryś system się nie zbudował, programy zostają przy poprzedniej, kompletnej wersji
+  # jeśli któryś system się nie zbudował albo nie był budowany, programy zostają przy poprzedniej, kompletnej wersji
   latest:
     needs: [check, build]
     runs-on: ubuntu-latest
     steps:
+      # także przy budowaniu jednego systemu: „latest” tylko wtedy, gdy w wydaniu są instalatory dla Windows i obu Maców
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "v${{ needs.check.outputs.version }}" -R "${{ github.repository }}" --latest
+        run: |
+          V="${{ needs.check.outputs.version }}"
+          names=$(gh release view "v$V" -R "${{ github.repository }}" --json assets -q '.assets[].name')
+          for f in "Blat-$V-win-x64.exe" "Blat-$V-mac-arm64.dmg" "Blat-$V-mac-x64.dmg"; do
+            echo "$names" | grep -qx "$f" || { echo "Brak $f — wydanie zostaje bez oznaczenia „latest”"; exit 0; }
+          done
+          gh release edit "v$V" -R "${{ github.repository }}" --latest

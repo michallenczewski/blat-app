@@ -45,4 +45,6 @@ window.BLAT_EN = {
   'Nie udało się zapisać zmian. Zamknij jeszcze raz, żeby wyjść bez zapisu.': 'Could not save the changes. Close again to quit without saving.',
   'brak połączenia': 'no connection', 'pobrany plik jest niepełny': 'the downloaded file is incomplete', 'pobrany plik jest uszkodzony': 'the downloaded file is damaged',
   'nie udało się zapisać pliku': 'could not save the file', 'najpierw trzeba zapisać zmiany w blacie': 'the board changes must be saved first',
+  'Zmiany w blacie bez folderu nie zostały zapisane': 'Changes to the board without a folder were not saved',
+  'Nie udało się dodać obrazów do blatu': 'Could not add the images to board',
 };
