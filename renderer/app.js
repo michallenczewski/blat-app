@@ -918,6 +918,15 @@ document.addEventListener('mousemove', () => {
   if (!hoverFocus || !isMac || document.hasFocus() || !api.focusWindow || Date.now() - hoverT < 800) return;
   hoverT = Date.now(); api.focusWindow();
 }, { passive: true });
+/* ---------- wciśnięcie przycisku ---------- */
+// :active trwa tyle co kliknięcie (~0,1 s) i ugięcie ikony ledwo zaczyna się przed puszczeniem;
+// trzymamy je co najmniej 90 ms, a po puszczeniu ikona wraca sprężyną (przejście z .ib>svg)
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest && e.target.closest('.ib'); if (!b || e.button) return;
+  b.classList.add('wcis'); const t0 = performance.now();
+  const up = () => { removeEventListener('pointerup', up); removeEventListener('pointercancel', up); setTimeout(() => b.classList.remove('wcis'), Math.max(0, 90 - (performance.now() - t0))); };
+  addEventListener('pointerup', up); addEventListener('pointercancel', up);
+});
 /* ---------- podpowiedzi przy przyciskach ---------- */
 // zamiast systemowego dymka: po 1,5 s bez ruchu pod przyciskiem pojawia się nazwa i skrót; między sąsiednimi przyciskami od razu
 let hintT = 0, hintEl = null, hintLast = 0;
@@ -1165,6 +1174,9 @@ window.blatTest = {
       const r0 = typeof hoverFocus !== 'undefined' && hoverFocus; if (typeof setHoverFocus === 'function') { setHoverFocus(true); ok(localStorage.getItem('blatHoverFocus') === '1', 'aktywowanie po najechaniu zapamiętane'); setHoverFocus(r0); } }
     // zmiana opisu przycisku (np. przypinka) nie przywraca systemowego dymka (uwaga recenzenta)
     { toggleTop(true); toggleTop(false); await new Promise(r => setTimeout(r, 30)); ok(!$('#topBtn').title && ($('#topBtn').dataset.tip || '').length > 0, 'przycisk po zmianie opisu nie ma systemowego dymka'); }
+    // wciśnięcie przycisku widać także przy szybkim kliknięciu (ikona ugina się i sprężyście wraca)
+    { const b = $('#arrangeBtn'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); dispatchEvent(new PointerEvent('pointerup', { button: 0 }));
+      ok(b.classList.contains('wcis'), 'po szybkim kliknięciu przycisk zostaje chwilę wciśnięty'); await new Promise(r => setTimeout(r, 160)); ok(!b.classList.contains('wcis'), 'i wraca'); }
     // podpowiedź po zatrzymaniu kursora na narzędziu
     { hintLast = 0; const b = $('#tools .ib[data-tool="pen"]'); b.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })); await new Promise(r => setTimeout(r, 700));
       ok(!$('#hint').classList.contains('on'), 'opis nie pojawia się przed upływem 1,5 s'); await new Promise(r => setTimeout(r, 900));

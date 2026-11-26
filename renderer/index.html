@@ -36,9 +36,10 @@ header button,header input,header .title b{-webkit-app-region:no-drag}
 .tools .ib{position:relative;z-index:1}
 .tools .ib.on,.tools .ib:hover{background:transparent;color:var(--text)}
 .ib{transition:background-color .15s,color .15s}
-.ib svg{transition:transform .35s var(--spring)}
-.ib:hover svg{transform:translateY(-1px)}
-.ib:active svg{transform:scale(.86)}
+.ib>svg{transition:transform .35s var(--spring)}
+.ib:hover>svg{transform:translateY(-1px)}
+/* wciśnięcie: klasa .wcis z app.js trzyma ugięcie co najmniej 90 ms, więc widać je także przy szybkim kliknięciu */
+.ib.wcis>svg{transform:scale(.84);transition:transform .09s ease-out}
 .ib.nie{animation:nie .38s ease-out}
 /* udane porządkowanie: tło przycisku błyska, kafelki ikony rozsypują się i wskakują na miejsca */
 .ib.tak{animation:tak .55s ease-out}
