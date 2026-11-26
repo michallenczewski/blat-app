@@ -41,4 +41,8 @@ window.BLAT_EN = {
   'Obrazy dodane do blatu': 'Images added to board',
   'Przeciągnij Blat do Programów': 'Drag Blat to Applications',
   'Nie udało się pobrać aktualizacji': 'Could not download the update',
+  'Folder blatu zniknął — zmiany nie są zapisywane': 'The board folder is gone — changes are not being saved',
+  'Nie udało się zapisać zmian. Zamknij jeszcze raz, żeby wyjść bez zapisu.': 'Could not save the changes. Close again to quit without saving.',
+  'brak połączenia': 'no connection', 'pobrany plik jest niepełny': 'the downloaded file is incomplete', 'pobrany plik jest uszkodzony': 'the downloaded file is damaged',
+  'nie udało się zapisać pliku': 'could not save the file', 'najpierw trzeba zapisać zmiany w blacie': 'the board changes must be saved first',
 };

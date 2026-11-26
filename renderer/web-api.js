@@ -14,7 +14,10 @@ if (!window.api) (() => {
     _failSave: 0,
     async boardSave(n, b) { if (!boards.has(n)) throw new Error('blat nie istnieje: ' + n); if (this._failSave > 0) { this._failSave--; throw new Error('EPERM'); }
       b.modified = Date.now(); boards.set(n, clone(b)); return { modified: b.modified, row: { name: n, count: b.items.filter(i => i.type !== 'drawing').length, thumbs: b.items.filter(i => i.img).slice(0, 2).map(i => i.img.thumb || i.img.full), modified: b.modified } }; },
-    async boardRename(a, b) { if (boards.has(b)) return null; const x = boards.get(a); boards.delete(a); x.name = b; boards.set(b, x); for (const [k, v] of [...files]) if (k.startsWith(a + '/')) { files.set(b + k.slice(a.length), v); files.delete(k); } return b; },
+    async boardAppend(n, items) { if (!boards.has(n)) throw new Error('blat nie istnieje: ' + n); const x = boards.get(n); x.items = (x.items || []).concat(clone(items)); x.modified = Date.now(); return null; },
+    // _slowRename: opóźnienie zmiany nazwy w ms (sprawdziany: wolna zmiana nazwy folderu na Windows)
+    _slowRename: 0,
+    async boardRename(a, b) { if (this._slowRename) await new Promise(r => setTimeout(r, this._slowRename)); if (boards.has(b)) return null; const x = boards.get(a); boards.delete(a); x.name = b; boards.set(b, x); for (const [k, v] of [...files]) if (k.startsWith(a + '/')) { files.set(b + k.slice(a.length), v); files.delete(k); } return b; },
     async boardTrash(n) { boards.delete(n); return true; },
     boardReveal() {},
     async imagePut(n, f, bytes) { if (!boards.has(n)) throw new Error('blat nie istnieje: ' + n); files.set(n + '/' + f, URL.createObjectURL(new Blob([bytes], { type: /\.png$/.test(f) ? 'image/png' : /\.jpe?g$/.test(f) ? 'image/jpeg' : 'image/webp' }))); return true; },

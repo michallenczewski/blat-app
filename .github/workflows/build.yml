@@ -24,7 +24,8 @@ jobs:
       version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v5
-      # wydanie powstaje tu, raz; zadania dla Maca i Windows tylko dokładają do niego pliki (bez wyścigu dwóch tworzących)
+      # wydanie powstaje tu, raz; zadania dla Maca i Windows tylko dokładają do niego pliki (bez wyścigu dwóch tworzących).
+      # Na razie NIE jako „latest”: programy dalej widzą poprzednią wersję, dopóki nie dojdą wszystkie instalatory (zadanie `latest`).
       - id: v
         env:
           GH_TOKEN: ${{ github.token }}
@@ -32,7 +33,7 @@ jobs:
           V=$(node -p "require('./package.json').version")
           echo "version=$V" >> "$GITHUB_OUTPUT"
           if ! gh release view "v$V" -R "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release create "v$V" -R "${{ github.repository }}" --target "${{ github.sha }}" --title "Blat $V" --notes "" --latest
+            gh release create "v$V" -R "${{ github.repository }}" --target "${{ github.sha }}" --title "Blat $V" --notes "" --latest=false
           fi
           echo "Buduję wersję $V"
 
@@ -78,3 +79,13 @@ jobs:
           files=(dist/*.dmg dist/*.zip dist/*.exe)
           [ ${#files[@]} -gt 0 ] || { echo "Brak plików do dołączenia"; exit 1; }
           gh release upload "v${{ needs.check.outputs.version }}" "${files[@]}" --clobber -R "${{ github.repository }}"
+
+  # wydanie staje się „latest” (to widzą programy przy sprawdzaniu aktualizacji) dopiero, gdy wszystkie instalatory są na miejscu;
+  # jeśli któryś system się nie zbudował, programy zostają przy poprzedniej, kompletnej wersji
+  latest:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v${{ needs.check.outputs.version }}" -R "${{ github.repository }}" --latest

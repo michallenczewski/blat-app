@@ -33,10 +33,10 @@ function saveSettings(now) {
 const boardsDir = () => settings.dir || path.join(app.getPath('documents'), 'Blat');
 const boardPath = name => path.join(boardsDir(), safeName(name) + '.blat');
 // nazwa tablicy = nazwa folderu: bez znaków, których system nie przyjmie
-// (na Windows także bez kropki na końcu i bez nazw zastrzeżonych: CON, NUL, COM1…)
+// (na Windows także bez nazw zastrzeżonych: CON, NUL, COM1…)
 const safeName = n => {
   let s = String(n || '').replace(/[\\/:*?"<>|\x00-\x1f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-  if (isWin) { s = s.replace(/[. ]+$/, ''); if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(s)) s += '_'; }
+  if (isWin && /^(con|prn|aux|nul|com\d|lpt\d)$/i.test(s)) s += '_';   // kropka na końcu nie szkodzi: do nazwy i tak dochodzi „.blat”
   return s || 'Blat';
 };
 
@@ -58,6 +58,12 @@ async function writeAtomic(file, data, bak) {
       catch (err) { if (!/^(EPERM|EBUSY|EACCES)$/.test(err.code) || ms === 800) throw err; }
     }
   } catch (err) { await fsp.unlink(tmp).catch(() => {}); throw err; }
+}
+async function renameRetry(from, to) {
+  for (const ms of [0, 50, 100, 200, 400, 800]) {
+    if (ms) await sleep(ms);
+    try { return await fsp.rename(from, to); } catch (err) { if (!/^(EPERM|EBUSY|EACCES)$/.test(err.code) || ms === 800) throw err; }
+  }
 }
 // zapisy jednego blatu idą po kolei, nigdy dwa naraz
 const queues = new Map();
@@ -84,13 +90,21 @@ ipcMain.handle('boards-list', async () => {
   out.sort((a, b) => b.modified - a.modified);
   return { dir, boards: out, last: settings.last };
 });
-ipcMain.handle('board-load', async (e, name) => {
+ipcMain.handle('board-load', (e, name) => queued(boardPath(name), async () => {
   try {
     const j = await readBoard(boardPath(name));
     settings.last = name; saveSettings();
     return j;
   } catch (err) { return null; }
-});
+}));
+// dopisanie elementów do blatu, który nie jest otwarty (import skończony po przełączeniu blatu); w kolejce zapisów, bez zmiany „ostatniego blatu”
+ipcMain.handle('board-append', (e, name, items) => queued(boardPath(name), async () => {
+  const dir = boardPath(name);
+  if (!fs.existsSync(dir)) throw new Error('blat nie istnieje: ' + name);
+  const j = await readBoard(dir); j.items = (j.items || []).concat(items); j.modified = Date.now();
+  await writeAtomic(path.join(dir, 'board.json'), JSON.stringify(j), true);
+  return listRow(name, j);
+}));
 ipcMain.handle('board-new', async (e, base) => {
   await fsp.mkdir(boardsDir(), { recursive: true });
   let name = safeName(base || 'Nowy blat'), n = 2;
@@ -115,8 +129,11 @@ ipcMain.handle('board-rename', (e, from, to) => queued(boardPath(from), async ()
   if (a === b) return safeName(to);
   const caseOnly = a.toLowerCase() === b.toLowerCase();   // sama wielkość liter: Mac i Windows widzą ten sam folder
   if (!caseOnly && fs.existsSync(b)) return null;
-  if (caseOnly) { const t = a + '.' + process.pid + '.ren'; await fsp.rename(a, t); await fsp.rename(t, b); }
-  else await fsp.rename(a, b);
+  if (caseOnly) {
+    // przez nazwę pośrednią; jeśli druga podmiana się nie uda, wracamy do starej nazwy (folder nie znika z listy)
+    const t = a + '.' + process.pid + '.ren'; await renameRetry(a, t);
+    try { await renameRetry(t, b); } catch (err) { await renameRetry(t, a).catch(() => {}); throw err; }
+  } else await renameRetry(a, b);
   if (settings.last === from) { settings.last = safeName(to); saveSettings(); }
   return safeName(to);
 }));
@@ -154,8 +171,9 @@ ipcMain.handle('url-fetch', async (e, url) => {
   const type = (r.headers.get('content-type') || '').split(';')[0].trim();
   if (!r.ok || !/^image\//.test(type)) throw new Error('to nie jest obraz');
   if (+r.headers.get('content-length') > 100 * 1048576) throw new Error('obraz jest za duży');
-  const b = Buffer.from(await r.arrayBuffer());
-  if (b.length > 100 * 1048576) throw new Error('obraz jest za duży');
+  const parts = []; let n = 0;   // czytamy po kawałku i przerywamy po 100 MB, także bez nagłówka długości
+  for await (const c of r.body) { n += c.length; if (n > 100 * 1048576) throw new Error('obraz jest za duży'); parts.push(c); }
+  const b = Buffer.concat(parts);
   return { type, bytes: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) };
 });
 
@@ -191,30 +209,39 @@ async function updCheck() {
     const want = isWin ? /-win-x64\.exe$/ : isMac ? new RegExp('-mac-' + process.arch + '\\.dmg$') : null;
     const a = want && (j.assets || []).find(x => want.test(x.name));
     upd = a && newer(v, app.getVersion()) ? { state: 'available', version: v, url: a.browser_download_url, name: a.name.replace(/[^a-z0-9._-]/gi, ''), size: a.size, sha256: /^sha256:[0-9a-f]{64}$/i.test(a.digest || '') ? a.digest.slice(7).toLowerCase() : null } : { state: 'none', version: v };
-  } catch (err) { upd = { state: 'error', error: err.message }; }
+  } catch (err) { upd = { state: 'error', error: 'network', detail: err.message }; }
   upd.current = app.getVersion(); tellAll('update-status', upd); return upd;
 }
+// błąd idzie do okna jako kod (network, incomplete, checksum, save, disk), a okno tłumaczy go przez _t
+const codeErr = (code, detail) => Object.assign(new Error(detail || code), { blatCode: code });
 async function updInstall() {
+  if (upd.state === 'opened' && upd.file) { shell.openPath(upd.file); return true; }   // Mac: ponowne otwarcie pobranego obrazu dysku
   if (upd.state !== 'available') return false;
   const file = path.join(isMac ? app.getPath('downloads') : app.getPath('temp'), upd.name);
   upd.state = 'downloading'; upd.got = 0; delete upd.error; tellAll('update-status', upd);
+  // pobieranie przerywamy, gdy przez 30 s nie przyszedł żaden bajt (zawieszone połączenie)
+  const ac = new AbortController(); let lastGot = -1;
+  const stall = setInterval(() => { if (upd.got === lastGot) ac.abort(); lastGot = upd.got; }, 30000);
   try {
-    const r = await net.fetch(upd.url, { headers: { 'User-Agent': 'Blat' } });
-    if (!r.ok || !r.body) throw new Error('pobieranie nie powiodło się (' + r.status + ')');
+    let r; try { r = await net.fetch(upd.url, { headers: { 'User-Agent': 'Blat' }, signal: ac.signal }); } catch (err) { throw codeErr('network', err.message); }
+    if (!r.ok || !r.body) throw codeErr('network', 'HTTP ' + r.status);
     const hash = crypto.createHash('sha256'); let last = 0;
     const src = Readable.fromWeb(r.body);
     src.on('data', c => { hash.update(c); upd.got += c.length; if (Date.now() - last > 400) { last = Date.now(); tellAll('update-status', upd); } });
-    await pipeline(src, fs.createWriteStream(file + '.part'));
-    // instalator uruchamiamy tylko wtedy, gdy przyszedł cały i niezmieniony
-    if (upd.size && upd.got !== upd.size) throw new Error('pobrany plik jest niepełny');
-    if (upd.sha256 && hash.digest('hex') !== upd.sha256) throw new Error('pobrany plik jest uszkodzony');
+    try { await pipeline(src, fs.createWriteStream(file + '.part')); } catch (err) { throw codeErr(ac.signal.aborted || !/^E[A-Z]+$/.test(err.code || '') ? 'network' : 'disk', err.message); }
+    // instalator uruchamiamy tylko wtedy, gdy przyszedł cały i niezmieniony (gdy wydanie nie ma sumy SHA-256, sprawdzamy sam rozmiar)
+    if (upd.size && upd.got !== upd.size) throw codeErr('incomplete');
+    if (upd.sha256 && hash.digest('hex') !== upd.sha256) throw codeErr('checksum');
     await fsp.rename(file + '.part', file);
-  } catch (err) { fsp.unlink(file + '.part').catch(() => {}); upd.state = 'available'; upd.error = err.message; tellAll('update-status', upd); return false; }
+  } catch (err) {
+    fsp.unlink(file + '.part').catch(() => {}); upd.state = 'available'; upd.error = err.blatCode || 'disk'; upd.detail = err.message; tellAll('update-status', upd); return false;
+  } finally { clearInterval(stall); }
   if (isWin) {
     upd.state = 'ready'; tellAll('update-status', upd);
-    await flushAll();   // przed wyjściem okno zapisuje ostatnie zmiany
-    spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref(); quitting = true; app.quit();
-  } else if (isMac) { upd.state = 'opened'; tellAll('update-status', upd); shell.openPath(file); }
+    // przed wyjściem okna zapisują ostatnie zmiany; jeśli zapis się nie uda, nie instalujemy (zmiany zostają w oknie)
+    if (!(await flushAll())) { upd.state = 'available'; upd.error = 'save'; tellAll('update-status', upd); return false; }
+    spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref(); quitNow();
+  } else if (isMac) { upd.state = 'opened'; upd.file = file; tellAll('update-status', upd); shell.openPath(file); }
   return true;
 }
 ipcMain.handle('update-get', () => ({ ...upd, current: app.getVersion() }));
@@ -222,25 +249,29 @@ ipcMain.handle('update-check', () => updCheck());
 ipcMain.handle('update-install', () => updInstall());
 
 /* ---------- zapis przy zamykaniu ---------- */
-// okno zamyka się dopiero, gdy potwierdzi zapis ostatnich zmian (najwyżej po 3 s)
-let quitting = false;
+// Okno zamyka się dopiero, gdy potwierdzi zapis ostatnich zmian (bez odpowiedzi — najwyżej po 3 s).
+// Gdy zapis się nie udał, okno zostaje otwarte i mówi o tym; drugie zamknięcie zamyka już bez zapisu.
+let quitting = false, saveFailed = false;
 function flushWin(w) {
-  if (w.isDestroyed()) return Promise.resolve();
+  if (w.isDestroyed()) return Promise.resolve(true);
   return new Promise(res => {
-    const id = Math.random().toString(36).slice(2), t = setTimeout(done, 3000);
-    function done() { clearTimeout(t); ipcMain.removeListener('flushed', on); res(); }
-    function on(e, got) { if (got === id) done(); }
+    const id = Math.random().toString(36).slice(2), t = setTimeout(() => done(true), 3000);
+    function done(ok) { clearTimeout(t); ipcMain.removeListener('flushed', on); res(ok); }
+    function on(e, got, ok) { if (got === id) done(ok !== false); }
     ipcMain.on('flushed', on); w.webContents.send('flush', id);
   });
 }
-const flushAll = () => Promise.all(BrowserWindow.getAllWindows().map(flushWin));
+const flushAll = async () => (await Promise.all(BrowserWindow.getAllWindows().map(flushWin))).every(Boolean);
+// wyjście z programu bez ponownego pytania okien o zapis
+function quitNow() { quitting = true; for (const w of BrowserWindow.getAllWindows()) w.flushed = true; saveSettings(true); app.quit(); }
 
 /* ---------- menu ---------- */
 // bez domyślnego menu Electrona: nie ma przeładowania okna (⌘R / Ctrl+R kasowałoby historię cofania) ani narzędzi deweloperskich
 function setMenu() {
   if (!isMac) { Menu.setApplicationMenu(null); return; }
-  // Widok: tylko pełny ekran (⌃⌘F) — systemowy skrót, na który Blat chowa interfejs
-  const t = [{ role: 'appMenu' }, { role: 'editMenu' }, { label: /^pl/i.test(app.getLocale()) ? 'Widok' : 'View', submenu: [{ role: 'togglefullscreen' }] }, { role: 'windowMenu' }];
+  // View: tylko pełny ekran (⌃⌘F) — systemowy skrót, na który Blat chowa interfejs
+  // nazwy menu jak w rolach Electrona (po angielsku), żeby nie mieszać języków; File daje ⌘W (zamknij okno)
+  const t = [{ role: 'appMenu' }, { role: 'fileMenu' }, { role: 'editMenu' }, { label: 'View', submenu: [{ role: 'togglefullscreen' }] }, { role: 'windowMenu' }];
   if (!app.isPackaged) t.push({ label: 'Rozwój', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }] });
   Menu.setApplicationMenu(Menu.buildFromTemplate(t));
 }
@@ -272,7 +303,7 @@ function createWindow() {
   win.on('close', e => {
     if (win.flushed) return;
     e.preventDefault(); win.flushed = true;
-    flushWin(win).then(() => { saveSettings(true); if (!win.isDestroyed()) win.close(); });
+    flushWin(win).then(ok => { saveSettings(true); if (ok && !win.isDestroyed()) win.close(); });
   });
   win.on('enter-full-screen', () => win.webContents.send('fullscreen', true));
   win.on('leave-full-screen', () => win.webContents.send('fullscreen', false));
@@ -301,4 +332,12 @@ else {
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   });
   app.on('window-all-closed', () => { if (!isMac || quitting) app.quit(); });
+  // ⌘Q, wylogowanie, wyłączenie komputera: najpierw zapis we wszystkich oknach, potem wyjście.
+  // (Zatrzymanie zamykania w samym „close” Electron traktuje jak odmowę wyjścia — dlatego tutaj.)
+  app.on('before-quit', e => {
+    if (quitting) return;
+    e.preventDefault(); quitting = true;
+    if (saveFailed) { quitNow(); return; }   // drugie ⌘Q po nieudanym zapisie: wychodzimy mimo to
+    flushAll().then(ok => { if (ok) quitNow(); else { quitting = false; saveFailed = true; for (const w of BrowserWindow.getAllWindows()) w.flushed = true; } });
+  });
 }

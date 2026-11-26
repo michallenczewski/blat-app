@@ -9,7 +9,7 @@
 - `renderer/i18n.js`, `renderer/lang/en.js` — napisy (polski jest kluczem, angielski w słowniku).
 - `renderer/web-api.js` — zastępczy `api` w pamięci, działa tylko w przeglądarce (do testów).
 - `scripts/serve.mjs` — serwer do testów w przeglądarce; `scripts/tlumaczenia.mjs` — sprawdzenie słownika.
-- `build/` — ikony i podpisywanie ad hoc na Macu; `.github/workflows/build.yml` — budowanie instalatorów na żądanie (wydanie tworzy zadanie `check`, a zadania dla Maca i Windows tylko dokładają do niego pliki); `.github/workflows/lockfile.yml` — odświeża `package-lock.json` i wypycha go od razu na `main` (w rozmowach z asystentem często nie ma sieci).
+- `build/` — ikony i podpisywanie ad hoc na Macu; `.github/workflows/build.yml` — budowanie instalatorów na żądanie (wydanie tworzy zadanie `check`, jeszcze nie jako „latest”; zadania dla Maca i Windows dokładają do niego pliki, a zadanie `latest` oznacza je jako najnowsze dopiero, gdy wszystkie się zbudowały — programy nie widzą wydania bez swojego instalatora); `.github/workflows/lockfile.yml` — odświeża `package-lock.json` i wypycha go od razu na `main` (w rozmowach z asystentem często nie ma sieci).
 
 ## Tryb bez nawigacji i pełny ekran
 
@@ -37,7 +37,7 @@ Element ma `id, type, x, y, w, h, z` oraz zależnie od typu `img:{full, thumb, w
 
 ### Zapis
 
-Autozapis wysyła sam JSON. Proces główny zapisuje go do pliku tymczasowego o niepowtarzalnej nazwie, robi `fsync`, odkłada poprzednią wersję jako `board.json.bak` i podmienia plik. Zapisy jednego blatu idą w kolejce, nigdy dwa naraz. Na Windows podmiana bywa chwilowo odrzucana (OneDrive, antywirus) — wtedy kilka prób, a nieudany zapis okno ponawia samo po 2 s. Zapis nie tworzy folderu blatu: blat przeniesiony do kosza nie wraca. Przy zamykaniu okna (także przed instalacją aktualizacji) proces główny prosi okno o zapis ostatnich zmian i widoku i czeka na potwierdzenie, najwyżej 3 s. Import kilku obrazów kończy się zawsze w blacie, na którym się zaczął, nawet jeśli w trakcie przełączono blat.
+Autozapis wysyła sam JSON. Proces główny zapisuje go do pliku tymczasowego o niepowtarzalnej nazwie, robi `fsync`, odkłada poprzednią wersję jako `board.json.bak` i podmienia plik. Zapisy jednego blatu idą w kolejce, nigdy dwa naraz. Na Windows podmiana bywa chwilowo odrzucana (OneDrive, antywirus) — wtedy kilka prób, a nieudany zapis okno ponawia samo po 2 s. Zapis nie tworzy folderu blatu: blat przeniesiony do kosza nie wraca. Przy zamykaniu okna, przy ⌘Q, wylogowaniu i wyłączeniu komputera (`before-quit`) oraz przed instalacją aktualizacji proces główny prosi okno o zapis ostatnich zmian i widoku (najpierw kończy edycję notatki albo nazwy) i czeka na potwierdzenie, najwyżej 3 s. Gdy zapis się nie uda, okno zostaje otwarte z komunikatem, a drugie zamknięcie zamyka bez zapisu; aktualizacja się wtedy nie instaluje. Gdy folder blatu zniknie (kosz, odłączony dysk, OneDrive), zmiany czekają w oknie z trwałym napisem, a zapis próbuje co 10 s. Zmiana nazwy blatu dotyczy blatu otwartego w chwili jej rozpoczęcia; przełączenie blatu czeka, aż się skończy. Import kilku obrazów kończy się zawsze w blacie, na którym się zaczął, nawet jeśli w trakcie przełączono blat (wtedy dopisuje go proces główny przez `board-append`, w tej samej kolejce co zapisy i odczyty tego blatu).
 
 Folder zamiast jednego pliku pozwala zapisywać po każdej zmianie sam lekki JSON. Wysłanie tablicy komuś to spakowanie folderu.
 
@@ -58,7 +58,7 @@ Duże obrazy zmniejszamy do 4096 px i zapisujemy jako WebP; mniejsze JPG, PNG, W
 
 ## Bezpieczeństwo okna
 
-Okno działa w piaskownicy (`sandbox`, `contextIsolation`, bez `nodeIntegration`) i widzi tylko `window.api` z `preload.js`. Nie ma wywołania, które czytałoby dowolny plik: obrazy z dysku przychodzą przez przeciągnięcie (`File` w oknie), a nazwy blatów i plików obrazów są oczyszczane, więc nie wychodzą poza folder blatów. Zamiast domyślnego menu Electrona jest własne (na Macu: program, Edycja, Okno; na Windows żadne), więc nie ma przeładowania okna ⌘R / Ctrl+R ani narzędzi deweloperskich. Aktualizacja uruchamia instalator dopiero po sprawdzeniu rozmiaru i sumy SHA-256 z wydania GitHuba.
+Okno działa w piaskownicy (`sandbox`, `contextIsolation`, bez `nodeIntegration`) i widzi tylko `window.api` z `preload.js`. Nie ma wywołania, które czytałoby dowolny plik: obrazy z dysku przychodzą przez przeciągnięcie (`File` w oknie), a nazwy blatów i plików obrazów są oczyszczane, więc nie wychodzą poza folder blatów. Zamiast domyślnego menu Electrona jest własne (na Macu role Electrona: program, File z ⌘W, Edit, View z samym pełnym ekranem ⌃⌘F, Window — wszystkie po angielsku, żeby nie mieszać języków; na Windows żadne, więc nie działa też F11, pełny ekran to Ctrl+spacja). Nie ma więc przeładowania okna ⌘R / Ctrl+R ani narzędzi deweloperskich. Aktualizacja uruchamia instalator dopiero po sprawdzeniu rozmiaru i sumy SHA-256 z wydania GitHuba (pole `digest`; gdy wydanie go nie ma, sprawdzamy sam rozmiar). Pobieranie przerywa się po 30 s bez danych. Błędy aktualizacji idą do okna jako kody i są tłumaczone tam.
 
 ## Licencje
 

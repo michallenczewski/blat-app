@@ -12,11 +12,12 @@ contextBridge.exposeInMainWorld('api', {
   boardReveal: n => ipcRenderer.invoke('board-reveal', n),
   imagePut: (n, file, bytes) => ipcRenderer.invoke('image-put', n, file, bytes),
   imageCopy: (from, to, file) => ipcRenderer.invoke('image-copy', from, to, file),
+  boardAppend: (n, items) => ipcRenderer.invoke('board-append', n, items),
   imagesPrune: (n, keep) => ipcRenderer.invoke('images-prune', n, keep),
   imageUrl: (n, file) => 'blat://b/' + encodeURIComponent(n) + '/' + encodeURIComponent(file),
   urlFetch: u => ipcRenderer.invoke('url-fetch', u),
   // zamykanie okna: proces główny prosi o zapis ostatnich zmian i czeka na potwierdzenie
-  onFlush: cb => ipcRenderer.on('flush', (e, id) => Promise.resolve(cb()).catch(() => {}).then(() => ipcRenderer.send('flushed', id))),
+  onFlush: cb => ipcRenderer.on('flush', (e, id) => Promise.resolve().then(cb).then(ok => ipcRenderer.send('flushed', id, ok !== false), () => ipcRenderer.send('flushed', id, false))),
   setOnTop: v => ipcRenderer.send('on-top', v),
   setSide: v => ipcRenderer.send('side', v),
   uiState: () => ipcRenderer.invoke('ui-state'),

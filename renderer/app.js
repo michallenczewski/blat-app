@@ -268,9 +268,11 @@ async function saveNow() {
     try { const r = await api.boardSave(b.name, b); if (board === b) $('#saved').textContent = _t('zapisane'); boardRow(r && r.row); }
     catch (e) {
       errors.push(e.message);
-      const gone = /nie istnieje/.test(e.message);   // folder blatu usunięto (kosz, Finder, Eksplorator): nie ma czego ponawiać
-      if (gone) boardsCache = boardsCache.filter(x => x.name !== b.name);
-      if (board === b && !gone) { dirty = true; $('#saved').textContent = _t('nie udało się zapisać'); clearTimeout(saveT); saveT = setTimeout(saveNow, 2000); }
+      // folder blatu zniknął (kosz, Finder, Eksplorator, odłączony dysk, OneDrive): zmiany zostają w oknie,
+      // napis mówi o tym wprost, a zapis próbuje dalej co 10 s — gdy folder wróci, wszystko się zapisze
+      const gone = /nie istnieje/.test(e.message);
+      if (gone) boardsCache = boardsCache.filter(x => x.name !== b.name);   // przejście na inny blat nie jest blokowane
+      if (board === b) { dirty = true; $('#saved').textContent = gone ? _t('Folder blatu zniknął — zmiany nie są zapisywane') : _t('nie udało się zapisać'); clearTimeout(saveT); saveT = setTimeout(saveNow, gone ? 10000 : 2000); }
     }
   })();
   try { await saving; } finally { saving = null; }
@@ -321,7 +323,9 @@ async function refreshBoards() {
   }
   return r;
 }
+let renaming = null;   // trwająca zmiana nazwy: przełączenie blatu czeka, aż się skończy
 async function openBoard(name) {
+  while (renaming) await renaming;
   clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; }   // przesunięty widok zapisujemy od razu
   await saveNow();
   if (dirty && board && byName(board.name)) { tip(_t('Nie udało się zapisać — spróbuję jeszcze raz')); return; }
@@ -353,14 +357,22 @@ function pruneImages(b) {
   for (const i of [...b.items, ...(clip && clip.board === b.name ? clip.items : [])]) if (i.img) { if (i.img.full) keep.push(i.img.full); if (i.img.thumb) keep.push(i.img.thumb); }   // wycięte obrazy czekają w schowku
   api.imagesPrune(b.name, keep);
 }
-async function renameBoard(v) {
-  clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; }
-  await saveNow();
-  let n; try { n = await api.boardRename(board.name, v); } catch (e) { errors.push(e.message); tip(_t('Nie udało się zmienić nazwy blatu')); return null; }
-  if (!n) { tip(_t('Blat o tej nazwie już istnieje')); return null; }
-  if (clip && clip.board === board.name) clip.board = n;
-  board.name = n; $('#bname').textContent = n; document.title = n + ' — Blat'; dirty = true; await saveNow(); drawAll(); refreshBoards();
-  return n;
+// zmiana nazwy dotyczy blatu otwartego w chwili jej rozpoczęcia — nawet jeśli w trakcie kliknięto inny blat
+function renameBoard(v) {
+  const run = async () => {
+    const b = board, from = b.name;
+    clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; }
+    await saveNow();
+    let n; try { n = await api.boardRename(from, v); } catch (e) { errors.push(e.message); tip(_t('Nie udało się zmienić nazwy blatu')); return null; }
+    if (!n) { tip(_t('Blat o tej nazwie już istnieje')); return null; }
+    if (clip && clip.board === from) clip.board = n;
+    b.name = n;
+    if (board === b) { $('#bname').textContent = n; document.title = n + ' — Blat'; dirty = true; await saveNow(); drawAll(); }
+    refreshBoards();
+    return n;
+  };
+  const p = run(); renaming = p.finally(() => { if (renaming === q) renaming = null; }); const q = renaming;
+  return p;
 }
 function renameStart() {
   const b = $('#bname'), inp = document.createElement('input'); inp.value = board.name; b.replaceWith(inp); inp.focus(); inp.select();
@@ -416,8 +428,8 @@ async function addImages(blobs, at) {
       tip(items.length > 1 ? _t('Dodane obrazy') + ': ' + items.length : _t('Dodany obraz'));
     } else {
       // blat zmieniono w trakcie: dopisujemy do tamtego blatu (wczytanego na nowo, bo mógł się zmienić) i zapisujemy
-      const t = await api.boardLoad(target.name);
-      if (t) { t.items = (t.items || []).concat(items); await api.boardSave(target.name, t); refreshBoards(); tip(_t('Obrazy dodane do blatu') + ' „' + target.name + '”'); }
+      // dopisuje proces główny, w kolejce zapisów tamtego blatu (bez zmiany „ostatnio otwartego”)
+      await api.boardAppend(target.name, items); refreshBoards(); tip(_t('Obrazy dodane do blatu') + ' „' + target.name + '”');
     }
     return items;
   } finally { for (const img of made) for (const f of [img.full, img.thumb]) pending.delete(target.name + '/' + f); }
@@ -820,7 +832,8 @@ function setTool(t) {
   if (t === 'pen' && tool !== 'pen') tip(_t('Mazak: rysuj po obrazach · Shift prosta kreska · Esc kończy').replace('Shift', SHIFT));
   tool = t; if (t !== 'pen') gum = false;
   for (const b of document.querySelectorAll('#tools .ib')) b.classList.toggle('on', b.dataset.tool === t);
-  const on = $('#tools .ib.on'), ind = $('#tools .ind'); if (on && ind) ind.style.transform = 'translateX(' + on.offsetLeft + 'px)';
+  // w wąskim oknie część narzędzi jest schowana; gdy wybrane jest schowane, wskaźnika nie pokazujemy
+  const on = $('#tools .ib.on'), ind = $('#tools .ind'); if (on && ind) { ind.style.transform = 'translateX(' + on.offsetLeft + 'px)'; ind.style.opacity = on.offsetParent ? '' : '0'; }
   main.className = main.className.replace(/\btool-\w+/g, '').trim(); if (t !== 'select') main.classList.add('tool-' + t);
   renderPenOpts();
 }
@@ -1053,14 +1066,27 @@ function initUi() {
   if (api.onFullscreen) api.onFullscreen(onFullscreen); else document.addEventListener('fullscreenchange', () => onFullscreen(!!document.fullscreenElement));
   setTool('select'); emptyTexts(); applyTheme(); pillTips();
   // zamykanie okna (także przed instalacją aktualizacji): proces główny czeka, aż zapiszemy ostatnie zmiany i widok
-  const flush = () => { if (!board) return; clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; } return saveNow(); };
+  // najpierw kończymy edycję (tekst notatki i nazwy trafia do danych dopiero przy opuszczeniu pola);
+  // zwraca false, gdy zapis się nie udał — wtedy okno zostaje otwarte, a drugie zamknięcie zamyka już bez zapisu
+  const flush = async () => {
+    if (!board) return true;
+    const a = document.activeElement; if (a && a !== document.body && a.blur) a.blur();
+    await new Promise(r => setTimeout(r));   // zmiana nazwy po opuszczeniu pola zaczyna się asynchronicznie
+    while (renaming) await renaming;
+    clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; }
+    await saveNow();
+    if (dirty) tip(_t('Nie udało się zapisać zmian. Zamknij jeszcze raz, żeby wyjść bez zapisu.'));
+    return !dirty;
+  };
   if (api.onFlush) api.onFlush(flush); else addEventListener('beforeunload', () => { if (dirty || viewT) api.boardSave(board.name, board); });
   // aktualizacje: dyskretna informacja w panelu bocznym
   if (api.onUpdateStatus) {
     // opened: na Macu pobrany obraz dysku jest otwarty, resztę (przeciągnięcie do Programów) robi użytkownik
     const show = s => { const b = $('#upd'); b.hidden = !(s && /^(available|downloading|ready|opened)$/.test(s.state));
       if (!b.hidden) b.textContent = s.state === 'available' ? _t('Nowa wersja') + ' ' + s.version : s.state === 'downloading' ? _t('Pobieram') + ' ' + (s.size ? Math.round(s.got / s.size * 100) + '%' : '') : s.state === 'opened' ? _t('Przeciągnij Blat do Programów') : _t('Instaluję…'); };
-    api.onUpdateStatus(s => { const err = s && s.error && (!updState || updState.error !== s.error); updState = s; show(s); if (err) tip(_t('Nie udało się pobrać aktualizacji') + ': ' + s.error); }); api.updateGet().then(s => { updState = s; show(s); });
+    // błąd pokazujemy tylko po próbie pobrania (nie przy cichym sprawdzaniu w tle); kod z procesu głównego tłumaczymy tutaj
+    const UPDERR = { network: 'brak połączenia', incomplete: 'pobrany plik jest niepełny', checksum: 'pobrany plik jest uszkodzony', disk: 'nie udało się zapisać pliku', save: 'najpierw trzeba zapisać zmiany w blacie' };
+    api.onUpdateStatus(s => { const err = s && s.error && updState && updState.state === 'downloading'; updState = s; show(s); if (err) tip(_t('Nie udało się pobrać aktualizacji') + ': ' + _t(UPDERR[s.error] || UPDERR.network)); }); api.updateGet().then(s => { updState = s; show(s); });
     $('#upd').onclick = () => api.updateInstall();
   }
 }
@@ -1258,7 +1284,7 @@ window.blatTest = {
     // ===== audyt 27.11.2026 =====
     // pełny obraz tylko dla obrazów na ekranie (albo tuż obok), reszta zostaje przy miniaturze
     { const far = await this.addTest(2, 1600, 1000); const [a, b] = far.map(byId); b.x = a.x + 20000; drawAll();
-      fit([a]); zoomAt(3); await new Promise(r => setTimeout(r, 250));
+      fit([a]); zoomAt(Math.max(1.05, 1000 / (Math.max(a.w, a.h) * board.view.z * DPR()))); await new Promise(r => setTimeout(r, 250));   // obraz na ekranie > 720 px w każdym oknie
       const src = it => els.get(it.id).firstChild.getAttribute('src');
       ok(src(a) === api.imageUrl(board.name, a.img.full), 'obraz na ekranie po przybliżeniu dostaje pełny plik');
       ok(src(b) === api.imageUrl(board.name, b.img.thumb), 'obraz daleko poza ekranem zostaje przy miniaturze');
@@ -1282,6 +1308,12 @@ window.blatTest = {
     // zapis blatu przeniesionego do kosza nie odtwarza go
     { const t = await this.newBoard('Kosz ' + Date.now()); this.note(0, 0, 'x'); await api.boardTrash(t); dirty = true; await saveNow(); const r = await api.boardsList();
       ok(!r.boards.some(b => b.name === t), 'zapis blatu z kosza nie tworzy go na nowo'); await this.open(name); }
+    // folder blatu znika w trakcie pracy: zmiany zostają w oknie, napis mówi o tym, a gdy folder wróci, zapis się udaje
+    { const t = await this.newBoard('Znika ' + Date.now()); const n1 = byId(this.note(0, 0, 'nie zgubić')); const keep = await api.boardLoad(t);
+      await api.boardTrash(t); dirty = true; await saveNow();
+      ok(dirty && $('#saved').textContent === _t('Folder blatu zniknął — zmiany nie są zapisywane'), 'zniknięcie folderu blatu: zmiany czekają w oknie i jest o tym napis');
+      await api.boardNew(t); clearTimeout(saveT); await saveNow(); const back = await api.boardLoad(t);
+      ok(!dirty && back && back.items.some(i => i.id === n1.id), 'gdy folder wraca, czekające zmiany się zapisują'); await api.boardTrash(t); await this.open(name); }
     errors.splice(eN, errors.length - eN, ...errors.slice(eN).filter(m => !/EPERM|nie istnieje/.test(m)));
     // menu kontekstowe w niskim oknie mieści się w oknie i nie wchodzi pod pasek okna
     { showMenu(20, 4, Array.from({ length: 60 }, (_, i) => ['Pozycja ' + i, () => {}])); const r = $('#menu').getBoundingClientRect();
@@ -1317,6 +1349,16 @@ window.blatTest = {
     { renderKeys(); const t = $('#keys').innerText; ok(isMac || !t.includes('⇧'), 'ściąga na Windows pisze Shift, nie ⇧'); }
     // w trybie bez nawigacji pastylka, gdy jej nie widać, nie blokuje przeciągania okna
     { toggleBare(true); document.body.classList.remove('moving'); ok(getComputedStyle($('#fspill')).getPropertyValue('-webkit-app-region') !== 'no-drag', 'niewidoczna pastylka nie blokuje przeciągania okna'); toggleBare(false); }
+    // zmiana nazwy trwa, a w tym czasie kliknięto inny blat: nowa nazwa dostaje się temu blatowi, który zmieniano (zgłoszenie recenzenta)
+    { const A = await this.newBoard('A ' + Date.now()); const na = byId(this.note(0, 0, 'treść A')); await this.save();
+      const B = await this.newBoard('B ' + Date.now()); const nb = byId(this.note(0, 0, 'treść B')); await this.save();
+      api._slowRename = 200; const pr = this.rename(B + ' nowa'); const po = this.open(A); await pr; await po; api._slowRename = 0;
+      const bn = await api.boardLoad(B + ' nowa'), an = await api.boardLoad(A);
+      ok(bn && bn.items.some(i => i.id === nb.id) && !bn.items.some(i => i.id === na.id) && an && an.items.some(i => i.id === na.id) && board.name === A, 'zmiana nazwy w trakcie przełączania blatu nie miesza treści blatów');
+      await api.boardTrash(A); await api.boardTrash(B + ' nowa'); await this.open(name); }
+    // import skończony po przełączeniu blatu nie zmienia „ostatnio otwartego” blatu
+    { const src = board.name, other = await this.newBoard('Ostatni ' + Date.now()); await this.open(src); const bl = await this.testBlobs(2, 600, 400), pr = addImages(bl); await this.open(other); await pr;
+      ok((await api.boardsList()).last === other, 'import w tle nie zmienia ostatnio otwartego blatu'); await this.open(src); await api.boardTrash(other); await refreshBoards(); }
     // polecenia testowe dla funkcji bez myszy: zmiana nazwy, kolejność warstw, narzędzie, motyw, rozmiar
     { const t = await this.newBoard('Nazwa ' + Date.now()); const n2 = await this.rename(t + ' b'); ok(n2 === t + ' b' && board.name === n2 && (await api.boardsList()).boards.some(x => x.name === n2), 'zmiana nazwy blatu');
       const a = byId(this.note(0, 0, 'a')), c = byId(this.note(10, 10, 'c')); sel = new Set([a.id]); this.reorder(1); ok((a.z || 0) > (c.z || 0), 'na wierzch'); this.reorder(-1); ok((a.z || 0) < (c.z || 0), 'na spód');
