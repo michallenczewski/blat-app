@@ -14,7 +14,7 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | ⌥A ⌥D ⌥W ⌥S | Alt+A Alt+D Alt+W Alt+S | wyrównaj do lewej, prawej, góry, dołu |
 | ⌥V ⌥H | Alt+V Alt+H | wyrównaj do osi pionowej / poziomej |
 | ⌥⇧H ⌥⇧V | Alt+Shift+H Alt+Shift+V | równe odstępy w poziomie / w pionie |
-| ⌥ + przeciąganie | Alt + przeciąganie | przesuwanie albo skalowanie bez przyciągania |
+| ⌥ + przeciąganie elementu albo uchwytu | Alt + przeciąganie elementu albo uchwytu | przesuwanie albo skalowanie bez przyciągania |
 | 0, 1, Z | 0, 1, Z | całość, 100%, dopasuj zaznaczone |
 | spacja albo ⌥ + przeciąganie | spacja albo Alt + przeciąganie | przesuwanie widoku |
 | kółko myszy | kółko myszy | przybliżanie (w ustawieniach — przycisk z suwakami w prawym górnym rogu — można zmienić na przesuwanie) |

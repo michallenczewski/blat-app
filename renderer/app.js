@@ -217,12 +217,13 @@ function drawItem(it) {
   if (it.type === 'note' && !el.isContentEditable && el.textContent !== (it.text || '')) el.textContent = it.text || '';
   el.classList.toggle('sel', sel.has(it.id));
   let hd = el.querySelector('.hd');
-  const showHd = sel.size === 1 && sel.has(it.id) && it.type !== 'drawing';
+  const showHd = sel.has(it.id) && it.type !== 'drawing' && soloSel();   // jeden element (kreski zaznaczone razem z nim się nie liczą)
   if (showHd && !hd) { hd = document.createElement('span'); hd.className = 'hd br'; el.appendChild(hd); }
   if (!showHd && hd) hd.remove();
   if (hd) { const k = 1 / board.view.z; hd.style.transform = 'scale(' + k + ')'; hd.style.transformOrigin = '100% 100%'; }
   if (it.type === 'note' && el.isConnected) it.h = Math.max(20, el.offsetHeight);   // wysokość notatki wynika z tekstu
 }
+function soloSel() { let n = 0; for (const id of sel) { const o = byId(id); if (o && o.type !== 'drawing' && ++n > 1) return false; } return n === 1; }
 function plural(n, one, few, many) {
   if (_lang !== 'pl') return n === 1 ? _t(one) : _t(many);
   if (n === 1) return one;
@@ -559,7 +560,10 @@ function alignUnits() {
   const list = selItems().filter(i => i.type !== 'drawing'), used = new Set(), units = [];
   for (const f of list.filter(i => i.type === 'frame')) {
     const items = [f, ...board.items.filter(o => o.type !== 'frame' && o.type !== 'drawing' && !used.has(o.id) && inside(o, f))];
-    items.forEach(o => used.add(o.id)); units.push({ b: f, items });
+    items.forEach(o => used.add(o.id));
+    // kreski na tle ramki (bez obrazu w ramce) jadą z ramką bezpośrednio; kreski na obrazach — przez followParent
+    for (const o of board.items) if (o.type === 'drawing' && !used.has(o.id) && !(o.parent && used.has(o.parent)) && inside(o, f)) { items.push(o); used.add(o.id); }
+    units.push({ b: f, items });
   }
   for (const i of list) if (i.type !== 'frame' && !used.has(i.id)) units.push({ b: i, items: [i] });
   return units;
@@ -568,9 +572,10 @@ function shake(msg) { const b = $('#arrangeBtn'); b.classList.remove('tak', 'nie
 function nod() { const b = $('#arrangeBtn'); b.classList.remove('tak', 'nie'); void b.offsetWidth; b.classList.add('tak'); }
 // Wspólna wysokość (szerokość): mediana zaznaczonych, proporcje obrazów zostają. Lewy górny róg każdego zostaje,
 // a jeśli elementy stały w rzędzie (kolumnie), zostają też odstępy między nimi — nic na siebie nie najeżdża.
+const sameSizeUnits = (units, dim) => units.filter(u => u.items.length === 1 && (u.b.type === 'image' || (dim === 'w' && u.b.type === 'note')));
 function sameSize(units, dim) {
   const P = dim === 'h' ? 'x' : 'y', S = dim === 'h' ? 'w' : 'h', T = dim;
-  const us = units.filter(u => u.items.length === 1 && (u.b.type === 'image' || (dim === 'w' && u.b.type === 'note')));
+  const us = sameSizeUnits(units, dim);
   if (us.length < 2) return false;
   const vals = us.map(u => u.b[T]).sort((a, c) => a - c), V = Math.round(vals[Math.floor((vals.length - 1) / 2)]);
   us.sort((p, q) => p.b[P] - q.b[P]);
@@ -578,7 +583,8 @@ function sameSize(units, dim) {
   const row = us.every((u, i) => !i || o[i][P] >= o[i - 1][P] + o[i - 1][S]);   // stoją jeden za drugim bez nachodzenia
   us.forEach((u, i) => {
     const it = u.b, k = V / it[T];
-    if (it.type === 'note') it.w = V; else { it.w = Math.round(it.w * k); it.h = Math.round(it.h * k); }
+    if (it.type === 'note') { it.w = V; drawItem(it); }   // notatka po zwężeniu robi się wyższa — nowa wysokość przed ustawieniem następnej
+    else { it.w = Math.round(it.w * k); it.h = Math.round(it.h * k); }
     if (row && i) it[P] = Math.round(us[i - 1].b[P] + us[i - 1].b[S] + (o[i][P] - o[i - 1][P] - o[i - 1][S]));
     followParent(it, o[i]);
   });
@@ -588,8 +594,9 @@ function alignSel(how) {
   const units = alignUnits();
   if (units.length < 2) { shake(_t('Zaznacz co najmniej dwa elementy')); return; }
   if ((how === 'dx' || how === 'dy') && units.length < 3) { shake(_t('Równe odstępy potrzebują co najmniej trzech elementów')); return; }
-  const moved = units.flatMap(u => u.items.flatMap(i => [i, ...kidsOf(i.id)])), before = new Map(moved.map(i => [i.id, { x: i.x, y: i.y, w: i.w, h: i.h }]));
-  const all = bbox(units.map(u => u.b));
+  if ((how === 'sameH' || how === 'sameW') && sameSizeUnits(units, how === 'sameH' ? 'h' : 'w').length < 2) { shake(_t('Zaznacz co najmniej dwa obrazy')); return; }
+  const moved = [...new Set(units.flatMap(u => u.items.flatMap(i => [i, ...kidsOf(i.id)])))], before = new Map(moved.map(i => [i.id, { x: i.x, y: i.y, w: i.w, h: i.h }]));
+  const all = bbox(units.map(u => u.b)), redo0 = redoStack.slice();
   snapshot();
   const move = (u, dx, dy) => { dx = Math.round(dx); dy = Math.round(dy); if (!dx && !dy) return; for (const i of u.items) { const o = { x: i.x, y: i.y, w: i.w, h: i.h }; i.x += dx; i.y += dy; if (i.type === 'image') followParent(i, o); } };
   if (how === 'left') units.forEach(u => move(u, all.x - u.b.x, 0));
@@ -607,7 +614,9 @@ function alignSel(how) {
     let at = first[P] + first[S] + gap;
     for (const u of us.slice(1, -1)) { const d = at - u.b[P]; move(u, P === 'x' ? d : 0, P === 'y' ? d : 0); at += u.b[S] + gap; }
   }
-  else if (how === 'sameH' || how === 'sameW') { if (!sameSize(units, how === 'sameH' ? 'h' : 'w')) { undoStack.pop(); shake(_t('Zaznacz co najmniej dwa obrazy')); return; } }
+  else if (how === 'sameH' || how === 'sameW') sameSize(units, how === 'sameH' ? 'h' : 'w');
+  // nic się nie ruszyło (np. już wyrównane): bez kroku cofania i bez zapisu
+  if (moved.every(i => { const o = before.get(i.id); return o.x === i.x && o.y === i.y && o.w === i.w && o.h === i.h; })) { undoStack.pop(); redoStack.push(...redo0); nod(); return; }
   drawAll(); changed(); glide(moved, before); nod();
 }
 const ALT = isMac ? '⌥' : 'Alt+', ALTSH = isMac ? '⌥⇧' : 'Alt+Shift+';
@@ -654,7 +663,7 @@ function snapTargets(exclude) {
     ys.push({ v: o.y, b: o }, { v: o.y + o.h / 2, b: o }, { v: o.y + o.h, b: o });
     if (o.type !== 'frame') boxes.push(o);
   }
-  const t = { xs, ys, boxes };
+  const t = { xs, ys, boxes, gaps: {} };
   snapCache = { ex: exclude, z: v.z, vx: v.x, vy: v.y, t };
   return t;
 }
@@ -667,7 +676,7 @@ function bestSnap(ours, targets, th) {
 function spacingSnap(axis, box, boxes, th) {
   const P = axis, S = axis === 'x' ? 'w' : 'h', Q = axis === 'x' ? 'y' : 'x', T = axis === 'x' ? 'h' : 'w';
   const overlap = (a, b) => a[Q] < b[Q] + b[T] && a[Q] + a[T] > b[Q];
-  const memo = boxes.gaps || (boxes.gaps = {});
+  const memo = (snapCache && snapCache.t.boxes === boxes) ? snapCache.t.gaps : {};
   let gaps = memo[axis];
   if (!gaps) {
     gaps = memo[axis] = [];
@@ -800,17 +809,21 @@ main.addEventListener('pointerdown', e => {
   else if (e.target.classList.contains('hd') && e.target.closest('#gbox')) {
     // skalowanie kilku zaznaczonych naraz: wszystko (z zawartością ramek i kreskami) rośnie od lewego górnego rogu
     const ms = movingSet(), list = [...ms].map(byId).filter(Boolean), b0 = bbox(list.filter(i => i.type !== 'drawing'));
-    drag = { kind: 'gresize', moved: false, b0, cur: b0, gx: b0.x + b0.w - w.x, gy: b0.y + b0.h - w.y, ms, start: list.map(o => [o, o.x, o.y, o.w, o.h]) };
+    // najmniejszy element nie schodzi poniżej 24 px (chyba że już był mniejszy — wtedy nie zmniejszamy wcale)
+    const minDim = Math.min(...list.filter(i => i.type !== 'drawing').map(i => Math.min(i.w, i.type === 'note' ? i.w : i.h)));
+    drag = { kind: 'gresize', moved: false, b0, cur: b0, kMin: Math.min(1, 24 / minDim), gx: b0.x + b0.w - w.x, gy: b0.y + b0.h - w.y, ms, start: list.map(o => [o, o.x, o.y, o.w, o.h]) };
   }
   else if (e.target.classList.contains('hd') && item) {
     drag = { kind: 'resize', moved: false, item, ox: w.x, oy: w.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0,
       gx: item.x + item.w - w.x, gy: item.y + item.h - w.y, kids: kidsOf(item.id).map(c => [c, c.x, c.y, c.w, c.h]) };
+    drag.ex = new Set([item.id, ...drag.kids.map(c => c[0].id)]);   // raz na przeciąganie (snapCache)
   } else if (item) {
     if (e.shiftKey || e.metaKey || e.ctrlKey) { sel.has(item.id) ? sel.delete(item.id) : sel.add(item.id); }
     else if (!sel.has(item.id)) sel = new Set([item.id]);
     // ramka przesuwa się razem z tym, co w niej leży
     const moving = movingSet(), start = [...moving].map(id => { const o = byId(id); return [o, o.x, o.y]; });
-    drag = { kind: 'move', ox: w.x, oy: w.y, start, moved: false, moving, box0: bbox(start.map(s => s[0]).filter(o => o.type !== 'drawing')) };
+    const solid = start.map(s => s[0]).filter(o => o.type !== 'drawing');   // sama kreska: przyciąga się jej prostokąt
+    drag = { kind: 'move', ox: w.x, oy: w.y, start, moved: false, moving, box0: bbox(solid.length ? solid : start.map(s => s[0])) };
     drawAll();
   } else {
     if (!e.shiftKey) sel.clear();
@@ -844,13 +857,13 @@ main.addEventListener('pointermove', e => {
     updateGbox();
   } else if (drag.kind === 'gresize') {
     if (!drag.moved) { drag.moved = true; snapshot(); }
-    const b0 = drag.b0, nb = resizeBox(b0, w.x + drag.gx, w.y + drag.gy, drag.ms, true, 24, e.altKey), k = nb.w / b0.w;
-    drag.cur = nb;
+    const b0 = drag.b0, nb = resizeBox(b0, w.x + drag.gx, w.y + drag.gy, drag.ms, true, 24, e.altKey), k = Math.max(drag.kMin, nb.w / b0.w);
+    drag.cur = { x: b0.x, y: b0.y, w: b0.w * k, h: b0.h * k };
     for (const [o, x, y, ow, oh] of drag.start) { o.x = b0.x + (x - b0.x) * k; o.y = b0.y + (y - b0.y) * k; o.w = ow * k; if (o.type !== 'note') o.h = oh * k; drawItem(o); }
     updateGbox();
   } else if (drag.kind === 'resize') {
     if (!drag.moved) { drag.moved = true; snapshot(); }   // krok cofania dopiero przy prawdziwej zmianie rozmiaru
-    const it = drag.item, nb = resizeBox({ x: it.x, y: it.y, w: drag.w0, h: drag.h0 }, w.x + drag.gx, w.y + drag.gy, new Set([it.id, ...drag.kids.map(c => c[0].id)]), !!drag.ratio, 24, e.altKey);
+    const it = drag.item, nb = resizeBox({ x: it.x, y: it.y, w: drag.w0, h: drag.h0 }, w.x + drag.gx, w.y + drag.gy, drag.ex, !!drag.ratio, 24, e.altKey);
     it.w = Math.round(nb.w); if (it.type !== 'note') it.h = Math.round(nb.h); drawItem(it);
     const k = it.w / drag.w0; for (const [c, x, y, cw, ch] of drag.kids) { c.x = it.x + (x - it.x) * k; c.y = it.y + (y - it.y) * k; c.w = cw * k; c.h = ch * k; drawItem(c); }
   } else if (drag.kind === 'newframe') {
@@ -881,7 +894,7 @@ function endDrag() {
   }
   if (d.kind === 'resize' && d.moved) { changed(); drawItem(d.item); frameCounts(); }
   if (d.kind === 'gresize' && d.moved) {
-    for (const [o] of d.start) { o.x = Math.round(o.x); o.y = Math.round(o.y); o.w = Math.round(o.w); if (o.type !== 'note') o.h = Math.round(o.h); }
+    for (const [o] of d.start) { o.x = Math.round(o.x); o.y = Math.round(o.y); o.w = Math.max(1, Math.round(o.w)); if (o.type !== 'note') o.h = Math.max(1, Math.round(o.h)); }
     changed(); frameCounts();
   }
   if (d.kind === 'newframe') {
@@ -1077,6 +1090,7 @@ function setTool(t) {
   toolInd();
   main.className = main.className.replace(/\btool-\w+/g, '').trim(); if (t !== 'select') main.classList.add('tool-' + t);
   renderPenOpts();
+  if (board) updateGbox();   // wspólna ramka tylko przy zaznaczaniu
 }
 addEventListener('keydown', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable)) return;
@@ -1097,9 +1111,11 @@ addEventListener('keydown', e => {
   if (mod && k === 's') { e.preventDefault(); dirty = true; saveNow(); return; }
   if (mod) return;
   // wyrównywanie: ⌥ / Alt + A D W S (krawędzie), V H (osie), ⇧ H V (równe odstępy); e.code, bo ⌥ na Macu zmienia znak
-  if (e.altKey && sel.size) {
+  // ⌥ / Alt + litera nigdy nie uruchamia zwykłych skrótów (na Windows Alt+F włączałby ramkę); przytrzymanie = jedno wyrównanie
+  if (e.altKey && /^Key[A-Z]$/.test(e.code)) {
     const A = e.shiftKey ? { KeyH: 'dx', KeyV: 'dy' } : { KeyA: 'left', KeyD: 'right', KeyW: 'top', KeyS: 'bottom', KeyV: 'cx', KeyH: 'cy' };
-    if (A[e.code]) { e.preventDefault(); alignSel(A[e.code]); return; }
+    if (A[e.code]) { e.preventDefault(); if (!e.repeat) alignSel(A[e.code]); }
+    return;
   }
   if (k === 'delete' || k === 'backspace') { e.preventDefault(); removeSel(); }
   else if (k === 'escape') { if (isFs() && fsBare !== null && !sel.size && tool === 'select') fullscreenToggle(); sel.clear(); setTool('select'); drawAll(); hideMenu(); }
@@ -1690,19 +1706,50 @@ window.blatTest = {
       this.undo(); rebind();
       // równe odstępy: trzeci obraz przyciąga się do odstępu jak między pierwszymi dwoma
       put(); b.y = 0; b.h = 300; b.w = 300; c.y = 0; c.x = 900 + 7; drawAll(); fit([a, b, c]); await new Promise(r => setTimeout(r, 30));   // odstęp a–b = 100, b–c = 107
-      [fx, fy] = scr(c.x + 50, c.y + 50); [tx, ty] = scr(c.x + 50 - 5, c.y + 50); await drag(els.get(c.id), fx, fy, tx, ty); ok(c.x - (b.x + b.w) === 100, 'przyciąganie do równego odstępu');
+      [fx, fy] = scr(c.x + 50, c.y + 50); [tx, ty] = [fx - 5, fy]; await drag(els.get(c.id), fx, fy, tx, ty);   // 5 px na ekranie w lewo, w każdym powiększeniu ok(c.x - (b.x + b.w) === 100, 'przyciąganie do równego odstępu');
       // zmiana rozmiaru przyciąga prawą krawędź do krawędzi innego obrazu
       put(); a.y = 400; drawAll(); sel = new Set([a.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
-      const hd = els.get(a.id).querySelector('.hd'), hr = hd.getBoundingClientRect(); [tx, ty] = scr(b.x + b.w - 4 / board.view.z, a.y + a.h);
-      await drag(hd, hr.left + 4, hr.top + 4, tx, ty); ok(a.x + a.w === b.x + b.w, 'zmiana rozmiaru przyciąga się do krawędzi innego obrazu');
+      const hd = els.get(a.id).querySelector('.hd'), [cx0, cy0] = scr(a.x + a.w, a.y + a.h); [tx, ty] = scr(b.x + b.w - 4 / board.view.z, a.y + a.h);   // chwyt dokładnie w rogu, róg 4 px przed krawędzią
+      await drag(hd, cx0, cy0, tx, ty); ok(a.x + a.w === b.x + b.w, 'zmiana rozmiaru przyciąga się do krawędzi innego obrazu');
       // skalowanie wielu: wspólna ramka zaznaczenia z uchwytem, proporcje i odległości skalują się razem
       put(); sel = new Set([a.id, b.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
       const gb = $('#gbox'), gh = gb && gb.querySelector('.hd'); ok(gb && gb.style.display !== 'none' && gh, 'przy kilku zaznaczonych jest wspólna ramka z uchwytem');
-      if (gh) { const box0 = bbox([a, b]), bx0 = b.x - a.x, r = gh.getBoundingClientRect(); [tx, ty] = scr(box0.x + box0.w * 1.5, box0.y + box0.h * 1.5);
-        await drag(gh, r.left + 4, r.top + 4, tx, ty, { altKey: true }); const k = a.w / 400;
+      if (gh) { const box0 = bbox([a, b]), bx0 = b.x - a.x, [gx0, gy0] = scr(box0.x + box0.w, box0.y + box0.h); [tx, ty] = scr(box0.x + box0.w * 1.5, box0.y + box0.h * 1.5);
+        await drag(gh, gx0, gy0, tx, ty, { altKey: true }); const k = a.w / 400;
         ok(Math.abs(k - 1.5) < .02 && Math.abs(b.w / 300 - k) < .02 && Math.abs((b.x - a.x) / bx0 - k) < .02 && a.x === 0 && a.y === 0, 'skalowanie wielu elementów naraz od lewego górnego rogu');
         this.undo(); rebind(); ok(a.w === 400 && b.w === 300, 'cofnięcie skalowania wielu'); }
       sel = new Set([a.id]); drawAll(); ok(!$('#gbox') || $('#gbox').style.display === 'none', 'przy jednym zaznaczonym nie ma wspólnej ramki');
+      // ===== po recenzji =====
+      // przesunięcie samej kreski (bez obrazu pod spodem) nie psuje jej położenia
+      { put(); const st = byId(this.stroke([[1300, 600], [1400, 650]])); sel = new Set([st.id]); drawAll(); const [p0, q0] = scr(st.x + 2, st.y + 2);
+        const P = (t, x, y, tg) => tg.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, buttons: t === 'pointerup' ? 0 : 1, clientX: x, clientY: y, pointerId: 1 }));
+        const x0 = st.x; P('pointerdown', p0, q0, els.get(st.id).querySelector('.hit') || els.get(st.id)); P('pointermove', p0 + 30, q0 + 20, main); P('pointerup', p0 + 30, q0 + 20, main);
+        const s2 = byId(st.id); ok(s2 && Number.isFinite(s2.x) && Number.isFinite(s2.y) && s2.x !== x0, 'przesunięta sama kreska ma poprawne położenie'); sel = new Set([st.id]); removeSel(); }
+      // skalowanie wielu w dół nie zmniejsza żadnego elementu poniżej 24 px
+      { put(); a.w = 2000; a.h = 1500; b.x = 2100; b.y = 0; b.w = 40; b.h = 30; drawAll(); sel = new Set([a.id, b.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
+        const box0 = bbox([a, b]), [gx0, gy0] = scr(box0.x + box0.w, box0.y + box0.h), [tx2, ty2] = scr(box0.x + 10, box0.y + 10);
+        await drag($('#gbox .hd'), gx0, gy0, tx2, ty2, { altKey: true }); rebind(); ok(Math.min(b.w, b.h) >= 23.5 && a.h > 0, 'skalowanie wielu nie zmniejsza elementu poniżej 24 px'); this.undo(); rebind(); }
+      // wspólna szerokość notatek w kolumnie: zawinięty tekst nie najeżdża na następną notatkę
+      { const n1 = byId(this.note(0, 1000, 'Długi tekst notatki, który po zwężeniu do wąskiej kolumny zawinie się w kilka wierszy i urośnie w dół.')), n2 = byId(this.note(0, 1100, 'krótka'));
+        n1.w = 600; n2.w = 200; n2.y = n1.y + n1.h + 20; drawAll(); sel = new Set([n1.id, n2.id]); this.align('sameW');
+        ok(n1.w === n2.w && n2.y >= n1.y + n1.h, 'wspólna szerokość notatek nie powoduje nachodzenia'); sel = new Set([n1.id, n2.id]); removeSel(); }
+      // kreska narysowana na tle ramki (bez obrazu) jedzie z ramką przy wyrównaniu
+      { put(); frameAround([c]); const fin2 = document.querySelector('.fl input'); if (fin2) fin2.blur(); const fr2 = selItems()[0];
+        const st = byId(this.stroke([[fr2.x + 8, fr2.y + 30], [fr2.x + 14, fr2.y + 34]])); st.parent = null; const off = st.x - fr2.x, offY = st.y - fr2.y, fy0 = fr2.y;
+        sel = new Set([a.id, fr2.id]); this.align('bottom'); ok(fr2.y !== fy0 && Math.abs(st.x - fr2.x - off) < 1 && Math.abs(st.y - fr2.y - offY) < 1, 'kreska na tle ramki jedzie z ramką przy wyrównaniu');
+        sel = new Set([fr2.id, st.id]); removeSel(); }
+      // nieudana wspólna wysokość nie kasuje historii ponawiania
+      { put(); const n1 = byId(this.note(0, 1300, 'x')), n2 = byId(this.note(0, 1400, 'y')); sel = new Set([n1.id]); this.move(10, 0); this.undo(); rebind();
+        const r1 = redoStack.length; sel = new Set(board.items.filter(i => i.type === 'note').map(i => i.id)); this.align('sameH'); ok(r1 > 0 && redoStack.length === r1, 'nieudana wspólna wysokość nie kasuje ponawiania'); removeSel(); }
+      // zmiana narzędzia chowa wspólną ramkę
+      { put(); sel = new Set([a.id, b.id]); drawAll(); setTool('note'); ok($('#gbox').style.display === 'none', 'wspólna ramka znika przy innym narzędziu'); setTool('select'); ok($('#gbox').style.display === 'block', 'i wraca przy zaznaczaniu'); }
+      // ⌥/Alt + litera bez zaznaczenia nie uruchamia zwykłych skrótów; przytrzymany skrót to jeden krok cofania; wyrównanie bez zmiany nie dodaje kroku
+      { sel.clear(); drawAll(); const t0 = tool, n0 = board.items.length; dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', altKey: true })); dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true }));
+        ok(tool === t0 && board.items.length === n0, 'Alt + litera bez zaznaczenia nie włącza zwykłych skrótów');
+        put(); sel = new Set(ids); const u0 = undoStack.length; dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true })); for (let i = 0; i < 3; i++) dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, repeat: true }));
+        ok(undoStack.length === u0 + 1, 'przytrzymany skrót wyrównania to jeden krok cofania'); dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true })); ok(undoStack.length === u0 + 1, 'wyrównanie bez zmiany nie dodaje kroku cofania'); }
+      // obraz zaznaczony razem ze swoją kreską ma uchwyt zmiany rozmiaru
+      { put(); const st = byId(this.stroke([[a.x + 20, a.y + 20], [a.x + 60, a.y + 30]])); sel = new Set([a.id, st.id]); drawAll(); ok(!!els.get(a.id).querySelector('.hd'), 'obraz zaznaczony z kreską ma uchwyt zmiany rozmiaru'); sel = new Set([st.id]); removeSel(); }
       sel = new Set(ids); removeSel(); await this.open(name); await api.boardTrash(tb); await refreshBoards(); fit(); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
