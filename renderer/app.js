@@ -1367,7 +1367,7 @@ function showSettings() {
   ];
   const inst = () => api.updateInstall && api.updateInstall();
   if (u.state === 'available') rows.push([_t('Zainstaluj wersję') + ' ' + u.version, inst, '', 'acc']);
-  else if (u.state === 'downloading') rows.push([_t('Pobieram wersję') + ' ' + u.version + (u.size ? ' — ' + Math.round(u.got / u.size * 100) + '%' : ''), () => {}, '', 'info']);
+  else if (u.state === 'downloading') rows.push([_t('Pobieram wersję') + ' ' + u.version + (u.size ? ' — ' + Math.min(100, Math.round(u.got / u.size * 100)) + '%' : ''), () => {}, '', 'info']);
   else if (u.state === 'ready') rows.push([_t('Instaluję…'), () => {}, '', 'info']);
   else if (u.state === 'opened') rows.push([_t('Przeciągnij Blat do Programów'), inst, '', 'acc']);   // ponownie otwiera pobrany obraz dysku
   else rows.push([_t('Sprawdź aktualizacje'), checkUpdates]);

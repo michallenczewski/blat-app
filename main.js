@@ -240,48 +240,54 @@ let upd = { state: 'idle' };
 const verNum = v => String(v || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
 const newer = (a, b) => { const x = verNum(a), y = verNum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
 const tellAll = (ch, v) => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send(ch, v); };
+// W trakcie pobierania, instalacji albo po otwarciu obrazu dysku sprawdzanie niczego nie zmienia — inaczej automatyczne
+// sprawdzenie (15 s po starcie, potem co 6 h) przywracało „Zainstaluj” i startowało drugie pobieranie (licznik ponad 100%).
+const updBusy = () => upd && /^(downloading|ready|opened)$/.test(upd.state);
 async function updCheck() {
+  if (updBusy()) { tellAll('update-status', upd); return upd; }
   try {
     const r = await net.fetch('https://api.github.com/repos/' + REPO + '/releases/latest', { headers: { 'User-Agent': 'Blat' } });
     if (!r.ok) throw new Error('GitHub ' + r.status);
     const j = await r.json(), v = String(j.tag_name || '').replace(/^v/, '');
     const want = isWin ? /-win-x64\.exe$/ : isMac ? new RegExp('-mac-' + process.arch + '\\.dmg$') : null;
     const a = want && (j.assets || []).find(x => want.test(x.name));
+    if (updBusy()) return upd;   // pobieranie zaczęło się, zanim przyszła odpowiedź
     upd = a && newer(v, app.getVersion()) ? { state: 'available', version: v, url: a.browser_download_url, name: a.name.replace(/[^a-z0-9._-]/gi, ''), size: a.size, sha256: /^sha256:[0-9a-f]{64}$/i.test(a.digest || '') ? a.digest.slice(7).toLowerCase() : null } : { state: 'none', version: v };
-  } catch (err) { upd = { state: 'error', error: 'network', detail: err.message }; }
+  } catch (err) { if (updBusy()) return upd; upd = { state: 'error', error: 'network', detail: err.message }; }
   upd.current = app.getVersion(); tellAll('update-status', upd); return upd;
 }
 // błąd idzie do okna jako kod (network, incomplete, checksum, save, disk), a okno tłumaczy go przez _t
 const codeErr = (code, detail) => Object.assign(new Error(detail || code), { blatCode: code });
 async function updInstall() {
   if (upd.state === 'opened' && upd.file) { shell.openPath(upd.file); return true; }   // Mac: ponowne otwarcie pobranego obrazu dysku
-  if (upd.state !== 'available') return false;
-  const file = path.join(isMac ? app.getPath('downloads') : app.getPath('temp'), upd.name);
-  upd.state = 'downloading'; upd.got = 0; delete upd.error; tellAll('update-status', upd);
+  if (upd.state !== 'available') return false;   // jedno pobieranie naraz
+  const u = upd;   // wszystko dalej na tym jednym obiekcie (licznik, stan, błąd)
+  const file = path.join(isMac ? app.getPath('downloads') : app.getPath('temp'), u.name);
+  u.state = 'downloading'; u.got = 0; delete u.error; tellAll('update-status', u);
   // pobieranie przerywamy, gdy przez 30 s nie przyszedł żaden bajt (zawieszone połączenie)
   const ac = new AbortController(); let lastByte = Date.now(), diskErr = false;
   const stall = setInterval(() => { if (Date.now() - lastByte > 30000) ac.abort(); }, 5000);
   try {
-    let r; try { r = await net.fetch(upd.url, { headers: { 'User-Agent': 'Blat' }, signal: ac.signal }); } catch (err) { throw codeErr('network', err.message); }
+    let r; try { r = await net.fetch(u.url, { headers: { 'User-Agent': 'Blat' }, signal: ac.signal }); } catch (err) { throw codeErr('network', err.message); }
     if (!r.ok || !r.body) throw codeErr('network', 'HTTP ' + r.status);
     const hash = crypto.createHash('sha256'); let last = 0;
     const src = Readable.fromWeb(r.body);
-    src.on('data', c => { lastByte = Date.now(); hash.update(c); upd.got += c.length; if (Date.now() - last > 400) { last = Date.now(); tellAll('update-status', upd); } });
+    src.on('data', c => { lastByte = Date.now(); hash.update(c); u.got += c.length; if (Date.now() - last > 400) { last = Date.now(); tellAll('update-status', u); } });
     const out = fs.createWriteStream(file + '.part'); out.on('error', () => { diskErr = true; });   // błąd zapisu pliku = dysk, każdy inny = sieć
     try { await pipeline(src, out); } catch (err) { throw codeErr(diskErr ? 'disk' : 'network', err.message); }
     // instalator uruchamiamy tylko wtedy, gdy przyszedł cały i niezmieniony (gdy wydanie nie ma sumy SHA-256, sprawdzamy sam rozmiar)
-    if (upd.size && upd.got !== upd.size) throw codeErr('incomplete');
-    if (upd.sha256 && hash.digest('hex') !== upd.sha256) throw codeErr('checksum');
+    if (u.size && u.got !== u.size) throw codeErr('incomplete');
+    if (u.sha256 && hash.digest('hex') !== u.sha256) throw codeErr('checksum');
     await fsp.rename(file + '.part', file);
   } catch (err) {
-    fsp.unlink(file + '.part').catch(() => {}); upd.state = 'available'; upd.error = err.blatCode || 'disk'; upd.detail = err.message; tellAll('update-status', upd); return false;
+    fsp.unlink(file + '.part').catch(() => {}); u.state = 'available'; u.error = err.blatCode || 'disk'; u.detail = err.message; tellAll('update-status', u); return false;
   } finally { clearInterval(stall); }
   if (isWin) {
-    upd.state = 'ready'; tellAll('update-status', upd);
+    u.state = 'ready'; tellAll('update-status', u);
     // przed wyjściem okna zapisują ostatnie zmiany; jeśli zapis się nie uda, nie instalujemy (zmiany zostają w oknie)
-    if (!(await flushAll('update'))) { upd.state = 'available'; upd.error = 'save'; tellAll('update-status', upd); return false; }
+    if (!(await flushAll('update'))) { u.state = 'available'; u.error = 'save'; tellAll('update-status', u); return false; }
     spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref(); quitNow();
-  } else if (isMac) { upd.state = 'opened'; upd.file = file; tellAll('update-status', upd); shell.openPath(file); }
+  } else if (isMac) { u.state = 'opened'; u.file = file; tellAll('update-status', u); shell.openPath(file); }
   return true;
 }
 ipcMain.handle('update-get', () => ({ ...upd, current: app.getVersion() }));
