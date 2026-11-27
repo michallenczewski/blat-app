@@ -15,6 +15,10 @@
 
 Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tablic. Na Macu płótno sięga samej góry okna: przyciski okna pokazują się nad nim tylko przy ruchu myszy (`setWindowButtonVisibility`), a okno przesuwa się za niewidoczny pas 28 px przy górnej krawędzi. Na Windows zostaje pasek 32 px na systemowe przyciski okna. Pełny ekran (⌃⌘F, Ctrl+spacja) włączony z programu od razu chowa interfejs, a po wyjściu przywraca poprzedni stan. Pastylka w prawym górnym rogu pojawia się przy ruchu myszy. Widok przesuwamy o różnicę położenia płótna, żeby obrazy nie przeskakiwały.
 
+## Przypięcie w trybie bez nawigacji
+
+Gdy okno jest przypięte („zawsze na wierzchu”), w trybie bez nawigacji widać samą przypinkę z pastylki — w tym samym miejscu, w którym stoi w pastylce. Po ruchu myszy pastylka (tło, cień, pozostałe przyciski) wyrasta wokół niej, więc pinezka nigdy nie przeskakuje. Sama przypinka nie jest obszarem `no-drag`, więc róg okna dalej da się przeciągać.
+
 ## Własne przyciski okna na Windows
 
 Opcja w ustawieniach „Przyciski okna w stylu Blatu” (tylko Windows, `settings.ownButtons`). Okno powstaje wtedy bez systemowej nakładki (`titleBarStyle: 'hidden'` bez `titleBarOverlay`), a minimalizuj, maksymalizuj/przywróć i zamknij rysuje Blat: w zwykłym widoku na końcu górnego paska, w trybie bez nawigacji w pastylce przy samym rogu (razem z przypinką, interfejsem i pełnym ekranem). Sterują oknem przez `win-ctl`; stan maksymalizacji przychodzi zdarzeniem `win-max`. Zamknij ma czerwone tło przy najechaniu, jak w Windows. Ustawienie działa od utworzenia okna, więc jego zmiana zapisuje blat i uruchamia Blat ponownie. W wąskim oknie (≤ 460 px) zostaje samo „zamknij”. Bez systemowych przycisków znika menu przyciągania okien Windows 11 po najechaniu na „maksymalizuj” (zostają Win+strzałki i przeciąganie do krawędzi ekranu).

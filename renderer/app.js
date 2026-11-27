@@ -1409,7 +1409,7 @@ function initUi() {
   $('#sideBtn').innerHTML = IC.side; $('#sideBtn').title = _t('Panel boczny'); $('#sideBtn').onclick = () => toggleSide();
   $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowy blat') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż i wyrównaj'); $('#arrangeBtn').onclick = e => { e.stopPropagation(); showArrangeMenu(); };
-  $('#topBtn').onclick = () => toggleTop(); $('#pillTop').onclick = e => { e.stopPropagation(); toggleTop(); }; $('#pinMark').innerHTML = IC.pinOn; toggleTop(onTop);
+  $('#topBtn').onclick = () => toggleTop(); $('#pillTop').onclick = e => { e.stopPropagation(); toggleTop(); }; toggleTop(onTop);
   if (!isMac && api.ownButtons) applyOwnButtons(true);
   if (api.onWinMax) api.onWinMax(v => { winMax = v; if (api.ownButtons) applyOwnButtons(true); });
   $('#setBtn').innerHTML = IC.set; $('#setBtn').title = _t('Ustawienia'); $('#setBtn').onclick = e => { e.stopPropagation(); showSettings(); };
@@ -1516,7 +1516,7 @@ window.blatTest = {
     ok(main.getBoundingClientRect().width > mw && Math.abs(main.getBoundingClientRect().width - innerWidth) < 2, 'płótno w trybie bez nawigacji zajmuje całą szerokość');
     for (const fr of ['frame-mac', 'frame-win']) { const de = document.documentElement, was = [...de.classList].find(c => c.startsWith('frame-')); de.classList.replace(was, fr);
       ok(Math.abs(main.getBoundingClientRect().top) < 1, (fr === 'frame-mac' ? 'na Macu' : 'na Windows') + ' w trybie bez nawigacji płótno sięga górnej krawędzi');
-      if (fr === 'frame-win') { toggleTop(true); const p = $('#pinMark').getBoundingClientRect(); ok(p.top < 30 && innerWidth - p.right >= 140, 'na Windows przypinka stoi u góry, obok przycisków okna'); toggleTop(false); }
+      if (fr === 'frame-win') { toggleTop(true); const p = $('#pillTop').getBoundingClientRect(); ok(p.top < 30 && innerWidth - p.right >= 140, 'na Windows przypinka stoi u góry, obok przycisków okna'); toggleTop(false); }
       de.classList.replace(fr, was); }
     this.bare(false); ok(getComputedStyle($('header')).display !== 'none' && Math.abs(main.getBoundingClientRect().width - mw) < 2, 'powrót interfejsu');
     // okno da się przesuwać: niewidoczna warstwa z no-drag nie może leżeć nad paskiem (Electron liczy obszary przeciągania bez względu na przezroczystość)
@@ -1537,8 +1537,13 @@ window.blatTest = {
     { const was = onTop, bg = () => { const c = getComputedStyle($('#topBtn'), '::before'); return c.content === 'none' ? getComputedStyle($('#topBtn')).backgroundColor : c.backgroundColor; };
       toggleTop(true); const on = bg(); toggleTop(false); const off = bg();
       ok(on === 'rgb(255, 107, 26)' && off !== on, 'przypięty przycisk pinezki jest pomarańczowy, odpięty nie');
-      toggleBare(true); document.body.classList.remove('moving'); toggleTop(true); const pm = $('#pinMark'); ok(pm && getComputedStyle(pm).display !== 'none', 'w trybie bez nawigacji przypięcie widać w rogu');
-      toggleTop(false); ok(!pm || getComputedStyle(pm).display === 'none', 'po odpięciu znak w rogu znika'); toggleBare(false); toggleTop(was); }
+      // przypięcie w trybie bez nawigacji: widać samą przypinkę z pastylki, a po ruchu myszy pastylka wyrasta wokół niej — pinezka nie przeskakuje (zgłoszenie Michała 27.11)
+      toggleBare(true); document.body.classList.add('moving'); toggleTop(true); await new Promise(r => setTimeout(r, 300)); const pt = $('#pillTop'), r1 = pt.getBoundingClientRect();
+      document.body.classList.remove('moving'); await new Promise(r => setTimeout(r, 300)); const r2 = pt.getBoundingClientRect(), op = el => +getComputedStyle(el).opacity;
+      ok(op($('#fspill')) > .9 && op(pt) > .9 && op($('#pillUi')) < .1, 'w trybie bez nawigacji przypięcie widać w rogu (sama przypinka)');
+      ok(Math.abs(r1.left - r2.left) < 1 && Math.abs(r1.top - r2.top) < 1, 'przypinka stoi w tym samym miejscu z pastylką i bez niej');
+      ok(getComputedStyle($('#fspill')).getPropertyValue('-webkit-app-region') !== 'no-drag', 'sama przypinka nie blokuje przeciągania okna');
+      toggleTop(false); await new Promise(r => setTimeout(r, 300)); ok(op($('#fspill')) < .1, 'po odpięciu przypinka w rogu znika'); toggleBare(false); toggleTop(was); }
     // animacje „sprężyna” i reakcja porządkowania (prośba Michała 25.11.2026)
     { setTool('note'); const ind = $('#tools .ind'), on = $('#tools .ib[data-tool="note"]');
       ok(ind && Math.abs(ind.getBoundingClientRect().left - on.getBoundingClientRect().left) < 40 && ind.style.transform.includes('translate'), 'wskaźnik narzędzi przesuwa się pod wybrane narzędzie'); setTool('select');
