@@ -1072,36 +1072,50 @@ function duplicateSel() { if (!sel.size) return; const keep = clip; copySel(); p
 // więc zwykłe ⌘C / ⌘V wewnątrz Blatu nic nie kosztuje. Blat poznaje potem własną kopię po odcisku obrazu (api.clipOurs).
 // Schowek mieści jeden obraz: idzie pierwszy obraz kopii (z zaznaczenia albo z ramki). Kreski mazaka nie idą — sam plik.
 // clipGen: każda kopia (także zwykły tekst w notatce) unieważnia starszą, jeszcze niezapisaną.
-let clipGen = 0, clipPending = null;
+let clipGen = 0, clipPending = null, clipWrittenGen = -1, clipT = 0;
 function clipMark(withImage) {
-  const g = ++clipGen; clipPending = null;
+  const g = ++clipGen; clipPending = null; clearTimeout(clipT);
   if (!withImage || !api.clipWrite || !clip) return;
   const im = clip.items.find(o => o.type === 'image' && o.img && o.img.full);
-  if (im) clipPending = { g, board: clip.board, file: im.img.full };
+  if (!im) return;
+  clipPending = { g, file: im.img.full, w: im.img.w, h: im.img.h };
+  clipT = setTimeout(clipFlush, 1000);   // chwilę po kopii, żeby zdążyć przed szybkim ⌘V w innym programie (albo wcześniej, na blur)
 }
-async function clipFlush() {
-  const p = clipPending; clipPending = null;
-  if (!p || p.g !== clipGen) return;
+// jedno zapisywanie naraz; wywołane drugi raz (blur w trakcie) czeka na to samo
+function clipFlush() {
+  const p = clipPending; if (!p) return Promise.resolve();
+  clipPending = null; clearTimeout(clipT);
+  return p.run || (p.run = clipWriteNow(p));
+}
+async function clipWriteNow(p) {
+  if (p.g !== clipGen || !clip) return;
+  const b = clip.board;   // bieżąca nazwa (zmiana nazwy blatu poprawia clip.board)
   try {
-    if (/\.(jpe?g|png)$/i.test(p.file)) { await api.clipWrite({ board: p.board, file: p.file }); return; }
-    // WebP i GIF: Windows ich nie odczyta, więc dekodujemy tu i wysyłamy PNG
-    const im = new Image(); im.src = api.imageUrl(p.board, p.file); await im.decode();
+    // JPEG i PNG czyta proces główny; gdy się nie uda (CMYK, 16 bitów, obrót z EXIF — inne wymiary), dekoduje okno
+    if (/\.(jpe?g|png)$/i.test(p.file) && await api.clipWrite({ board: b, file: p.file, w: p.w, h: p.h })) { clipWrittenGen = p.g; return; }
+    const im = new Image(); im.src = api.imageUrl(b, p.file); await im.decode();
     const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0); im.src = '';
     const png = await new Promise(r => c.toBlob(r, 'image/png')); c.width = c.height = 0;   // pamięć zwalniamy od razu
-    if (png && p.g === clipGen) await api.clipWrite({ png: await png.arrayBuffer() });
+    const buf = png && await png.arrayBuffer();
+    if (buf && p.g === clipGen && await api.clipWrite({ png: buf })) clipWrittenGen = p.g;   // nowsza kopia w trakcie: nie nadpisujemy jej
   } catch (err) { errors.push(err.message); }
 }
 addEventListener('blur', () => { clipFlush(); });
+// unieważniamy obraz tylko wtedy, gdy kopiowanie naprawdę coś zapisuje (tekst w polu, notatce albo zaznaczony tekst)
+const textCopy = e => (e.target.closest && (e.target.closest('input') || e.target.isContentEditable)) || (!sel.size && String(getSelection()).length > 0);
 document.addEventListener('copy', e => {
-  if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) { clipMark(false); return; }   // zwykły tekst: nie nadpisujemy go obrazem
+  if (textCopy(e)) { clipMark(false); return; }
+  if (!sel.size) return;
   e.preventDefault(); e.clipboardData.setData('text/plain', copySel()); clipMark(true);
 });
 document.addEventListener('cut', e => {
-  if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) { clipMark(false); return; }
+  if (textCopy(e)) { clipMark(false); return; }
+  if (!sel.size) return;
   e.preventDefault(); e.clipboardData.setData('text/plain', cutSel()); clipMark(true);   // plik wyciętego obrazu zostaje (pruneImages trzyma pliki ze schowka)
 });
 // wklejamy własną kopię, jeśli w schowku jest jej tekst albo nasz obraz (po przejściu do innego programu i z powrotem)
-const ourClipboard = async text => isOurClip(text) || (!!clip && !text && !!api.clipOurs && await api.clipOurs());
+// (obraz tylko wtedy, gdy zapisała go właśnie bieżąca kopia — stary nasz obraz przywrócony z historii schowka to zwykły obraz)
+const ourClipboard = async text => isOurClip(text) || (!!clip && !text && clipWrittenGen === clipGen && !!api.clipOurs && await api.clipOurs());
 async function pasteFromClipboard(p) {
   let text = ''; try { text = await navigator.clipboard.readText(); } catch (e) {}
   if (await ourClipboard(text)) { pasteClip(p); return; }
@@ -1390,14 +1404,15 @@ function initUi() {
   // najpierw kończymy edycję (tekst notatki i nazwy trafia do danych dopiero przy opuszczeniu pola);
   // zwraca false, gdy zapis się nie udał — wtedy okno zostaje otwarte, a drugie zamknięcie zamyka już bez zapisu
   const flush = async reason => {
-    await clipFlush();   // skopiowany obraz zostaje w schowku systemu także po zamknięciu Blatu
-    if (!board) return true;
+    const clipDone = clipFlush();   // skopiowany obraz zostaje w schowku systemu także po zamknięciu — ale zapis blatu ma pierwszeństwo
+    if (!board) { await Promise.race([clipDone, new Promise(r => setTimeout(r, 1500))]); return true; }
     const a = document.activeElement; if (a && a !== document.body && a.blur) a.blur();
     await new Promise(r => setTimeout(r));   // zmiana nazwy po opuszczeniu pola zaczyna się asynchronicznie
     while (renaming) await renaming;
     clearTimeout(viewT); if (viewT) { viewT = 0; dirty = true; }
     await saveNow();
     if (dirty && reason !== 'update') tip(_t('Nie udało się zapisać zmian. Zamknij jeszcze raz, żeby wyjść bez zapisu.'));   // przy aktualizacji mówi o tym jej komunikat
+    await Promise.race([clipDone, new Promise(r => setTimeout(r, 1500))]);   // razem z zapisem mieści się w 3 s procesu głównego
     return !dirty;
   };
   if (api.onFlush) api.onFlush(flush); else addEventListener('beforeunload', () => { if (dirty || viewT) api.boardSave(board.name, board); });
@@ -1830,6 +1845,17 @@ window.blatTest = {
       api._clipOurs = false; const n1 = board.items.length; document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt })); await wait(600);
       added = board.items.slice(n1); ok(added.length === 1 && added[0].type === 'image' && added[0].img.full !== i1.img.full, 'obraz z innego programu wkleja się jako nowy obraz');
       sel = new Set(added.map(i => i.id)); removeSel(); api._clipOurs = null;
+      // stary nasz obraz w schowku (np. przywrócony z historii schowka) po nowszej kopii w Blacie: wkleja się jako obraz, nie jako nowsza kopia
+      { sel = new Set([i1.id]); cp(); await leave(); sel = new Set([nn.id]); cp(); api._clipOurs = true;   // odcisk zgodny ze starym obrazem
+        const n2 = board.items.length; document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt })); await wait(600);
+        const ad = board.items.slice(n2); ok(ad.length === 1 && ad[0].type === 'image', 'stary obraz ze schowka po nowszej kopii wkleja się jako obraz'); sel = new Set(ad.map(i => i.id)); removeSel(); api._clipOurs = null; }
+      // ⌘C bez zaznaczenia i bez zaznaczonego tekstu nie unieważnia skopiowanego obrazu
+      { api._clip = null; sel = new Set([i1.id]); cp(); sel.clear(); getSelection().removeAllRanges(); cp(); await leave(); ok(api._clip && api._clip.file === i1.img.full, 'puste ⌘C nie unieważnia skopiowanego obrazu'); }
+      // obraz, którego proces główny nie odczyta z pliku (np. JPEG w CMYK, obrót z EXIF): idzie zdekodowany przez okno jako PNG
+      { api._clip = null; api._clipFileFail = true; sel = new Set([i1.id]); cp(); await leave(); api._clipFileFail = false;
+        ok(api._clip && api._clip.png && api._clip.png.byteLength > 1000, 'gdy plik się nie wczyta, obraz idzie jako PNG z okna'); }
+      // obraz trafia do schowka także bez przełączania programu, chwilę po kopii (żeby zdążyć przed szybkim ⌘V w innym programie)
+      { api._clip = null; sel = new Set([i1.id]); cp(); await wait(1600); ok(api._clip && api._clip.file === i1.img.full, 'obraz trafia do schowka chwilę po kopii, bez przełączania'); }
       // wycięcie obrazu: znika z blatu, a jego plik i tak trafia do schowka systemu
       sel = new Set([i2.id]); document.dispatchEvent(new ClipboardEvent('cut', { bubbles: true, cancelable: true, clipboardData: new DataTransfer() })); api._clip = null; await leave();
       ok(!byId(i2.id) && api._clip && api._clip.file === f0, 'wycięty obraz trafia do schowka systemu'); this.undo();

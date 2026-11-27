@@ -25,7 +25,7 @@ if (!window.api) (() => {
     async updateGet() { return { state: 'none', current: '0.0.0-web' }; }, async updateCheck() { return { state: 'none', current: '0.0.0-web' }; }, async updateInstall() { return false; }, onUpdateStatus() {},
     // schowek systemu: w przeglądarce testowej tylko zapamiętujemy, co by tam trafiło (sprawdziany)
     // _clipOurs: wynik porównania odcisku obrazu w schowku (null = obraz zapisany przez nas, jeśli jakiś był)
-    _clip: null, _clipOurs: null, async clipWrite(img) { this._clip = { ...img }; return true; },
+    _clip: null, _clipOurs: null, _clipFileFail: false, async clipWrite(img) { if (img.file && this._clipFileFail) return false; this._clip = { ...img }; return true; },
     async clipOurs() { return this._clipOurs == null ? !!this._clip : this._clipOurs; },
     async imageCopy(a, b, f) { const u = files.get(a + '/' + f) || files.get(b + '/' + f); if (u) files.set(b + '/' + f, u); return !!u; },
     imageUrl: (n, f) => files.get(n + '/' + f) || '',

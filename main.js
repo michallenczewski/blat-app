@@ -170,26 +170,39 @@ ipcMain.handle('images-prune', async (e, name, keep) => {
 // okno dekoduje samo i przysyła jako PNG, bo Windows ich nie odczyta.
 // Do schowka trafia sam obraz (bez tekstu, żeby Word czy Notatki nie wkleiły znacznika). Własną kopię Blat poznaje
 // po odcisku: wymiary i próbka pikseli obrazu, który tu zapisaliśmy, porównane z obrazem w schowku przy wklejaniu.
+// Odcisk: wymiary i skrót SHA-1 całej bitmapy; bitmapę czytamy tylko przy zgodnych wymiarach (obcy zrzut ekranu nic nie kosztuje).
 let clipFp = null;
-function imageFp(image) {
-  if (!image || image.isEmpty()) return null;
-  const { width, height } = image.getSize(), bm = image.toBitmap(), n = bm.length >> 2, parts = [width, height];
-  for (let i = 0; i < 97; i++) { const k = Math.floor(i * (n - 1) / 96) * 4; parts.push(bm.readUInt32LE(k)); }
-  return parts.join(',');
+const imageHash = image => crypto.createHash('sha1').update(image.toBitmap()).digest('hex');
+// wymiary z nagłówka PNG (IHDR), zanim cokolwiek zdekodujemy — mały plik o ogromnych wymiarach nie przejdzie
+function pngSize(buf) {
+  if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47 || buf.toString('ascii', 12, 16) !== 'IHDR') return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
+const tooBig = s => !s || s.width * s.height > 8192 * 8192;
 ipcMain.handle('clip-write', async (e, img) => {
   let image = null;
   if (img && img.png) {
-    if (!(img.png instanceof ArrayBuffer) || img.png.byteLength > 150 * 1048576) return false;
-    image = nativeImage.createFromBuffer(Buffer.from(img.png));
-  } else if (img && img.board && img.file) image = nativeImage.createFromPath(path.join(boardPath(img.board), 'img', imgName(img.file)));
-  if (!image || image.isEmpty()) return false;
-  const s = image.getSize(); if (s.width * s.height > 8192 * 8192) return false;
+    const ab = img.png instanceof ArrayBuffer ? img.png : ArrayBuffer.isView(img.png) ? img.png.buffer : null;
+    if (!ab || ab.byteLength > 150 * 1048576) return false;
+    const buf = Buffer.from(ab); if (tooBig(pngSize(buf))) return false;
+    image = nativeImage.createFromBuffer(buf);
+  } else if (img && img.board && img.file) {
+    image = nativeImage.createFromPath(path.join(boardPath(img.board), 'img', imgName(img.file)));
+    // inne wymiary niż w Blacie (np. zdjęcie z telefonu obrócone tagiem EXIF): niech dekoduje okno
+    if (!image.isEmpty() && img.w && img.h) { const s = image.getSize(); if (s.width !== img.w || s.height !== img.h) return false; }
+  }
+  if (!image || image.isEmpty() || tooBig(image.getSize())) return false;
   clipboard.writeImage(image);
-  clipFp = imageFp(clipboard.readImage()) || imageFp(image);   // odcisk tego, co faktycznie jest w schowku
+  clipFp = { size: image.getSize(), hash: null };
+  setImmediate(() => { const now = clipboard.readImage(); if (clipFp && !now.isEmpty()) clipFp.hash = imageHash(now); });   // odcisk tego, co faktycznie jest w schowku
   return true;
 });
-ipcMain.handle('clip-ours', () => { if (!clipFp) return false; const now = imageFp(clipboard.readImage()); return !!now && now === clipFp; });
+ipcMain.handle('clip-ours', () => {
+  if (!clipFp || !clipFp.hash) return false;
+  const now = clipboard.readImage(); if (now.isEmpty()) return false;
+  const s = now.getSize(); if (s.width !== clipFp.size.width || s.height !== clipFp.size.height) return false;
+  return imageHash(now) === clipFp.hash;
+});
 // obraz przeciągnięty z przeglądarki internetowej: okno nie pobierze go samo (CORS), więc pobiera proces główny
 ipcMain.handle('url-fetch', async (e, url) => {
   if (!/^https?:\/\//i.test(url)) throw new Error('zły adres');
