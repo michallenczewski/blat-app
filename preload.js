@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('api', {
   uiState: () => ipcRenderer.invoke('ui-state'),
   chromeColors: (bg, fg, h) => ipcRenderer.send('chrome-colors', bg, fg, h),
   setBare: v => ipcRenderer.send('bare', v),
+  // własne przyciski okna (Windows): czy to okno ich używa, sterowanie oknem, stan maksymalizacji
+  ownButtons: process.platform === 'win32' ? ipcRenderer.sendSync('own-buttons') : false,
+  setOwnButtons: v => ipcRenderer.invoke('own-buttons-set', v),
+  winCtl: c => ipcRenderer.send('win-ctl', c),
+  onWinMax: cb => ipcRenderer.on('win-max', (e, v) => cb(v)),
   windowButtons: v => ipcRenderer.send('window-buttons', v),
   fullscreenToggle: () => ipcRenderer.send('fullscreen-toggle'),
   onFullscreen: cb => ipcRenderer.on('fullscreen', (e, v) => cb(v)),

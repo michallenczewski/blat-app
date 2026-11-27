@@ -184,6 +184,19 @@ body.bare.moving #fspill,body.bare #fspill:hover{-webkit-app-region:no-drag}   /
 @media (max-width:380px){.frame-mac .title{display:none}}
 @media (max-width:360px){.frame-mac #arrangeBtn{display:none}}
 /* Windows: przyciski okna zajmują 150 px po prawej, więc to samo chowamy wcześniej; ustawienia zostają widoczne do końca */
+/* własne przyciski okna (Windows, opcja): w pasku zamiast miejsca na systemowe, w trybie bez nawigacji w pastylce przy samym rogu */
+.frame-win.own-btns header{padding-right:10px}
+.wbs{display:flex;align-items:center;gap:2px;-webkit-app-region:no-drag}
+#winBtns .sep{margin:0 6px 0 4px}
+.wb[data-w=close]:hover{background:#E81123;color:#fff}
+#pillWin .sep{width:1px;height:16px;background:var(--line);margin:0 3px}
+#fspill .wbs{display:none}
+.own-btns #fspill .wbs{display:flex}
+.frame-win.own-btns body.bare::before{right:0}
+.frame-win.own-btns body.bare #fspill{top:6px;right:8px}
+.frame-win.own-btns body.bare #pinMark{right:14px}
+/* wąskie okno: zostaje samo „zamknij” (minimalizacja i maksymalizacja: Win+↓ / Win+↑ albo dwuklik w pasek) */
+@media (max-width:460px){.own-btns #winBtns [data-w=min],.own-btns #winBtns [data-w=max]{display:none}}
 @media (max-width:540px){.frame-win .title{display:none}}
 @media (max-width:500px){.frame-win #arrangeBtn{display:none}}
 @media (max-width:420px){.frame-win #tools .ib[data-tool=frame]{display:none}}

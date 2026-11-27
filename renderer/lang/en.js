@@ -58,4 +58,6 @@ window.BLAT_EN = {
   'przeciąganie elementu': 'dragging an item', 'bez przyciągania': 'without snapping',
   'wyrównaj do lewej, prawej, góry, dołu': 'align left, right, top, bottom', 'wyrównaj do osi pionowej / poziomej': 'align to vertical / horizontal axis',
   'równe odstępy w poziomie / w pionie': 'equal horizontal / vertical spacing',
+  'Minimalizuj': 'Minimize', 'Maksymalizuj': 'Maximize', 'Przywróć': 'Restore', 'Zamknij': 'Close',
+  'Przyciski okna w stylu Blatu': 'Window buttons in Blat style', 'Blat uruchomi się ponownie z nowymi przyciskami okna…': 'Blat will restart with the new window buttons…',
 };

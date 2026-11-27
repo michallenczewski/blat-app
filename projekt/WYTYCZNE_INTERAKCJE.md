@@ -205,6 +205,16 @@ We wszystkich programach z rodziny ustawienia są w **tym samym miejscu i pod t�
 - W bardzo wąskim oknie przycisk ustawień zostaje widoczny do końca; wcześniej chowają się nazwa
   dokumentu i przyciski z własnym skrótem klawiszowym.
 
+## 8a. Przyciski okna na Windows (opcja)
+
+- Programy rodziny na Windows mogą mieć w ustawieniach opcję **„Przyciski okna w stylu [programu]”**: zamiast
+  systemowych minimalizuj / maksymalizuj / zamknij rysujemy własne przyciski `.ib` w tym samym stylu co reszta paska
+  (ikony 15 px, kreska 1,3 px: kreska poziomo; kwadrat 9 px; dwa nachodzące kwadraty przy przywracaniu; krzyżyk 8 px).
+- Stoją na końcu górnego paska, za przyciskiem ustawień, oddzielone kreską. W trybie bez nawigacji — w pastylce przy rogu.
+- „Zamknij” przy najechaniu: tło `#E81123`, ikona biała (jak w Windows). Podpowiedzi: „Minimalizuj (Win+↓)”,
+  „Maksymalizuj (Win+↑)” / „Przywróć (Win+↓)”, „Zamknij (Alt+F4)”.
+- W wąskim oknie (≤ 460 px) zostaje samo „zamknij”.
+
 ## 9. Mniej ruchu, gdy system o to prosi
 
 ```css

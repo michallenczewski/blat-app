@@ -223,7 +223,7 @@ ipcMain.handle('ui-state', () => ({ side: settings.side !== false, onTop: !!sett
 // h: wysokość paska z przyciskami okna na Windows (52 px zwykle, 32 px w trybie bez nawigacji)
 ipcMain.on('chrome-colors', (e, bg, fg, h) => {
   const w = BrowserWindow.fromWebContents(e.sender);
-  if (isWin && w) try { w.setTitleBarOverlay({ color: bg, symbolColor: fg, height: h || 52 }); } catch (err) {}
+  if (isWin && w && !w.ownBtns) try { w.setTitleBarOverlay({ color: bg, symbolColor: fg, height: h || 52 }); } catch (err) {}
 });
 // tryb bez nawigacji: na Macu przyciski okna przesuwają się bliżej rogu, nad płótno
 ipcMain.on('bare', (e, v) => { const w = BrowserWindow.fromWebContents(e.sender); if (isMac && w && w.setWindowButtonPosition) try { w.setWindowButtonPosition(v ? { x: 14, y: 13 } : { x: 18, y: 19 }); } catch (err) {} });
@@ -326,17 +326,37 @@ function boundsOnScreen(b) {
   return b;
 }
 
+// Własne przyciski okna na Windows (opcja „Przyciski okna w stylu Blatu”): okno bez systemowej nakładki, przyciski rysuje Blat.
+// Ustawienie działa od utworzenia okna, więc jego zmiana uruchamia Blat ponownie.
+const ownBtns = () => isWin && !!settings.ownButtons;
+ipcMain.on('own-buttons', e => { const w = BrowserWindow.fromWebContents(e.sender); e.returnValue = !!(w && w.ownBtns); });
+ipcMain.handle('own-buttons-set', async (e, v) => {
+  settings.ownButtons = !!v; saveSettings(true);
+  if (!(await flushAll('relaunch'))) return false;
+  app.relaunch(); quitNow(); return true;
+});
+ipcMain.on('win-ctl', (e, cmd) => {
+  const w = BrowserWindow.fromWebContents(e.sender); if (!w) return;
+  if (cmd === 'min') w.minimize();
+  else if (cmd === 'max') w.isMaximized() ? w.unmaximize() : w.maximize();
+  else if (cmd === 'close') w.close();
+});
+
 function createWindow() {
-  const b = boundsOnScreen(settings.bounds);
+  const b = boundsOnScreen(settings.bounds), own = ownBtns();
   const win = new BrowserWindow({
     width: b.width || 1400, height: b.height || 900, x: b.x, y: b.y,
     minWidth: 320, minHeight: 220, // mały blat z referencjami w rogu ekranu (także „zawsze na wierzchu”)
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#161616' : '#f7f7f5',
     title: 'Blat', show: false,
     ...(isMac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 19 } }
+      : own ? { titleBarStyle: 'hidden' }
       : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#f7f7f5', symbolColor: '#4a4945', height: 52 } }),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
+  win.ownBtns = own;
+  const maxState = () => { if (!win.isDestroyed()) win.webContents.send('win-max', win.isMaximized()); };
+  win.on('maximize', maxState); win.on('unmaximize', maxState);
   if (settings.maximized) win.maximize();
   if (settings.onTop) win.setAlwaysOnTop(true, 'floating');
   win.once('ready-to-show', () => win.show());

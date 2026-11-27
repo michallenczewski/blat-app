@@ -27,6 +27,10 @@ const IC = {
   plus: svg('<path d="M8 3v10M3 8h10"/>', 13),
   ui: svg('<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.2h12"/>'),
   fs: svg('<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>') + svg('<path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/>'),
+  wmin: svg('<path d="M3.5 8.5h9"/>'),
+  wmax: svg('<rect x="3.5" y="3.5" width="9" height="9" rx="1"/>'),
+  wrest: svg('<rect x="3.5" y="5.5" width="7" height="7" rx="1"/><path d="M5.5 5.5v-1a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-1"/>'),
+  wclose: svg('<path d="M4 4l8 8M12 4l-8 8"/>'),
   set: svg('<path d="M2.5 5.5h11M2.5 10.5h11"/><circle cx="6" cy="5.5" r="1.8" fill="var(--bg)"/><circle cx="10.5" cy="10.5" r="1.8" fill="var(--bg)"/>'),
 };
 
@@ -1241,6 +1245,27 @@ function onFullscreen(v) {
 }
 // przyciski okna na Macu: ukryte w trybie bez nawigacji (poza pełnym ekranem), dopóki mysz stoi
 let btnShown = true;
+/* ---------- własne przyciski okna (Windows, opcja w ustawieniach) ---------- */
+// W zwykłym widoku na końcu górnego paska, w trybie bez nawigacji w pastylce — w tym samym stylu co reszta przycisków.
+let winMax = false;
+function winBtnsHtml() {
+  const b = (w, ic, t) => '<button class="ib wb" data-w="' + w + '" title="' + t + '">' + ic + '</button>';
+  return b('min', IC.wmin, _t('Minimalizuj') + ' (Win+↓)') + b('max', winMax ? IC.wrest : IC.wmax, (winMax ? _t('Przywróć') : _t('Maksymalizuj')) + ' (Win+↑)') + b('close', IC.wclose, _t('Zamknij') + ' (Alt+F4)');
+}
+function applyOwnButtons(v) {
+  document.documentElement.classList.toggle('own-btns', !!v);
+  for (const id of ['winBtns', 'pillWin']) { const o = document.getElementById(id); if (o) o.remove(); }
+  if (!v) return;
+  const h = document.createElement('div'); h.id = 'winBtns'; h.className = 'wbs'; h.innerHTML = '<span class="sep"></span>' + winBtnsHtml(); $('header').appendChild(h);
+  const p = document.createElement('span'); p.id = 'pillWin'; p.className = 'wbs'; p.innerHTML = '<span class="sep"></span>' + winBtnsHtml(); $('#fspill').appendChild(p);
+  for (const el of document.querySelectorAll('.wbs .wb')) el.onclick = e => { e.stopPropagation(); api.winCtl(el.dataset.w); };
+}
+async function toggleOwnButtons() {
+  const v = !api.ownButtons;
+  if (api.web) { await api.setOwnButtons(v); applyOwnButtons(v); return; }
+  tip(_t('Blat uruchomi się ponownie z nowymi przyciskami okna…'));
+  setTimeout(() => api.setOwnButtons(v), 600);
+}
 function syncButtons() {
   const v = !isMac || !isBare() || isFs() || document.body.classList.contains('moving');
   if (v !== btnShown && api.windowButtons) { btnShown = v; api.windowButtons(v); }
@@ -1301,6 +1326,7 @@ function showSettings() {
     [_t('Kółko myszy przesuwa'), () => setWheelMode('pan'), wheelMode === 'pan' ? '✓' : ''],
     '-',
     ...(isMac || api.web ? [[_t('Aktywuj Blat po najechaniu kursorem'), () => setHoverFocus(!hoverFocus), hoverFocus ? '✓' : ''], '-'] : []),
+    ...(!isMac && api.winCtl ? [[_t('Przyciski okna w stylu Blatu'), toggleOwnButtons, api.ownButtons ? '✓' : ''], '-'] : []),
     ['Blat ' + (u.current || ''), () => {}, '', 'info']
   ];
   const inst = () => api.updateInstall && api.updateInstall();
@@ -1384,6 +1410,8 @@ function initUi() {
   $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowy blat') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
   $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż i wyrównaj'); $('#arrangeBtn').onclick = e => { e.stopPropagation(); showArrangeMenu(); };
   $('#topBtn').onclick = () => toggleTop(); $('#pillTop').onclick = e => { e.stopPropagation(); toggleTop(); }; $('#pinMark').innerHTML = IC.pinOn; toggleTop(onTop);
+  if (!isMac && api.ownButtons) applyOwnButtons(true);
+  if (api.onWinMax) api.onWinMax(v => { winMax = v; if (api.ownButtons) applyOwnButtons(true); });
   $('#setBtn').innerHTML = IC.set; $('#setBtn').title = _t('Ustawienia'); $('#setBtn').onclick = e => { e.stopPropagation(); showSettings(); };
   $('#keys').addEventListener('click', e => { if (!e.target.closest('.kc')) toggleKeys(false); });
   $('#bname').ondblclick = renameStart; $('#bname').title = _t('Dwuklik zmienia nazwę');
@@ -1860,6 +1888,20 @@ window.blatTest = {
       sel = new Set([i2.id]); document.dispatchEvent(new ClipboardEvent('cut', { bubbles: true, cancelable: true, clipboardData: new DataTransfer() })); api._clip = null; await leave();
       ok(!byId(i2.id) && api._clip && api._clip.file === f0, 'wycięty obraz trafia do schowka systemu'); this.undo();
       sel = new Set([i1.id, nn.id, ...board.items.filter(i => i.id === i2.id).map(i => i.id)]); removeSel(); }
+    // własne przyciski okna na Windows (opcja w ustawieniach; prośba Michała 27.11): w pasku i w pastylce trybu bez nawigacji
+    if (!isMac) { const de = document.documentElement, was = [...de.classList].find(c => c.startsWith('frame-')); de.classList.replace(was, 'frame-win');
+      showSettings(); const row = [...$('#menu').querySelectorAll('button')].find(x => x.firstChild.textContent === _t('Przyciski okna w stylu Blatu'));
+      ok(!!row, 'na Windows w ustawieniach jest opcja własnych przycisków okna'); if (row) row.click(); hideMenu(); await new Promise(r => setTimeout(r, 30));
+      const wb = $('header #winBtns'); ok(wb && wb.querySelectorAll('.ib').length === 3 && de.classList.contains('own-btns'), 'włączone: trzy przyciski okna na końcu górnego paska');
+      if (wb) { wb.querySelector('[data-w="min"]').click(); ok(api._winCtl === 'min', 'przycisk minimalizuj działa');
+        ok(getComputedStyle(wb).getPropertyValue('-webkit-app-region') === 'no-drag', 'przyciski okna nie są obszarem przeciągania');
+        ok(getComputedStyle($('header')).paddingRight !== '150px', 'bez miejsca na systemowe przyciski');
+        const r = wb.getBoundingClientRect(); ok(r.right <= innerWidth && innerWidth - r.right < 20, 'przyciski okna przy prawej krawędzi'); }
+      toggleBare(true); document.body.classList.add('moving'); const pb = $('#fspill .wbs'); ok(pb && pb.querySelectorAll('.ib').length === 3, 'w trybie bez nawigacji przyciski okna są w pastylce');
+      ok(getComputedStyle($('#fspill')).right === '12px' || parseInt(getComputedStyle($('#fspill')).right) < 20, 'pastylka przy samym rogu (nie ma systemowych przycisków)'); document.body.classList.remove('moving'); toggleBare(false);
+      showSettings(); [...$('#menu').querySelectorAll('button')].find(x => x.firstChild.textContent === _t('Przyciski okna w stylu Blatu')).click(); hideMenu(); await new Promise(r => setTimeout(r, 30));
+      ok(!$('header #winBtns') && !de.classList.contains('own-btns'), 'wyłączone: znowu przyciski systemowe'); de.classList.replace('frame-win', was); }
+    else { showSettings(); ok(!$('#menu').innerText.includes(_t('Przyciski okna w stylu Blatu')), 'na Macu nie ma opcji przycisków okna'); hideMenu(); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();
