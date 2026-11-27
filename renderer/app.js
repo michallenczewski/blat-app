@@ -223,7 +223,15 @@ function drawItem(it) {
   if (hd) { const k = 1 / board.view.z; hd.style.transform = 'scale(' + k + ')'; hd.style.transformOrigin = '100% 100%'; }
   if (it.type === 'note' && el.isConnected) it.h = Math.max(20, el.offsetHeight);   // wysokość notatki wynika z tekstu
 }
-function soloSel() { let n = 0; for (const id of sel) { const o = byId(id); if (o && o.type !== 'drawing' && ++n > 1) return false; } return n === 1; }
+// czy zaznaczony jest dokładnie jeden element (kreski zaznaczone razem z nim się nie liczą); liczone raz na stan zaznaczenia
+// (ważne do zmiany zbioru sel, jego rozmiaru albo liczby elementów; drawAll liczy zawsze od nowa)
+let soloSet = null, soloSize = -1, soloLen = -1, soloVal = false;
+function soloSel() {
+  if (soloSet === sel && soloSize === sel.size && soloLen === board.items.length) return soloVal;
+  const ids = new Map(board.items.map(o => [o.id, o])); let n = 0;
+  for (const id of sel) { const o = ids.get(id); if (o && o.type !== 'drawing' && ++n > 1) break; }
+  soloSet = sel; soloSize = sel.size; soloLen = board.items.length; soloVal = n === 1; return soloVal;
+}
 function plural(n, one, few, many) {
   if (_lang !== 'pl') return n === 1 ? _t(one) : _t(many);
   if (n === 1) return one;
@@ -236,7 +244,7 @@ function ranks() {
     .sort((a, b) => ((a[0].z || 0) - (b[0].z || 0)) || (a[1] - b[1])).map(([o], r) => [o.id, r]));
 }
 function drawAll() {
-  ranks(); renderPenOpts();
+  ranks(); renderPenOpts(); soloSet = null;
   const ids = new Set(board.items.map(i => i.id));
   for (const [id, el] of els) if (!ids.has(id)) { el.remove(); els.delete(id); }
   for (const it of board.items) drawItem(it);   // ramki (z licznikiem zawartości) też tu
@@ -561,11 +569,13 @@ function alignUnits() {
   for (const f of list.filter(i => i.type === 'frame')) {
     const items = [f, ...board.items.filter(o => o.type !== 'frame' && o.type !== 'drawing' && !used.has(o.id) && inside(o, f))];
     items.forEach(o => used.add(o.id));
-    // kreski na tle ramki (bez obrazu w ramce) jadą z ramką bezpośrednio; kreski na obrazach — przez followParent
-    for (const o of board.items) if (o.type === 'drawing' && !used.has(o.id) && !(o.parent && used.has(o.parent)) && inside(o, f)) { items.push(o); used.add(o.id); }
     units.push({ b: f, items });
   }
-  for (const i of list) if (i.type !== 'frame' && !used.has(i.id)) units.push({ b: i, items: [i] });
+  for (const i of list) if (i.type !== 'frame' && !used.has(i.id)) { units.push({ b: i, items: [i] }); used.add(i.id); }
+  // kreski na tle ramki jadą z ramką bezpośrednio — tylko te, których obraz nie jest w żadnej jednostce
+  // (kreski obrazów jadą za nimi przez followParent; inaczej kreska przesunęłaby się dwa razy)
+  for (const u of units) if (u.b.type === 'frame')
+    for (const o of board.items) if (o.type === 'drawing' && !used.has(o.id) && !(o.parent && used.has(o.parent)) && inside(o, u.b)) { u.items.push(o); used.add(o.id); }
   return units;
 }
 function shake(msg) { const b = $('#arrangeBtn'); b.classList.remove('tak', 'nie'); void b.offsetWidth; b.classList.add('nie'); if (msg) tip(msg); }
@@ -616,7 +626,8 @@ function alignSel(how) {
   }
   else if (how === 'sameH' || how === 'sameW') sameSize(units, how === 'sameH' ? 'h' : 'w');
   // nic się nie ruszyło (np. już wyrównane): bez kroku cofania i bez zapisu
-  if (moved.every(i => { const o = before.get(i.id); return o.x === i.x && o.y === i.y && o.w === i.w && o.h === i.h; })) { undoStack.pop(); redoStack.push(...redo0); nod(); return; }
+  const same = (p, q) => Math.abs(p - q) < .01;
+  if (moved.every(i => { const o = before.get(i.id); return same(o.x, i.x) && same(o.y, i.y) && same(o.w, i.w) && same(o.h, i.h); })) { undoStack.pop(); redoStack.push(...redo0); nod(); return; }
   drawAll(); changed(); glide(moved, before); nod();
 }
 const ALT = isMac ? '⌥' : 'Alt+', ALTSH = isMac ? '⌥⇧' : 'Alt+Shift+';
@@ -858,6 +869,7 @@ main.addEventListener('pointermove', e => {
   } else if (drag.kind === 'gresize') {
     if (!drag.moved) { drag.moved = true; snapshot(); }
     const b0 = drag.b0, nb = resizeBox(b0, w.x + drag.gx, w.y + drag.gy, drag.ms, true, 24, e.altKey), k = Math.max(drag.kMin, nb.w / b0.w);
+    if (nb.w / b0.w < drag.kMin) clearGuides();   // przy dolnej granicy ramka nie stoi na linii, do której przyciągnęło
     drag.cur = { x: b0.x, y: b0.y, w: b0.w * k, h: b0.h * k };
     for (const [o, x, y, ow, oh] of drag.start) { o.x = b0.x + (x - b0.x) * k; o.y = b0.y + (y - b0.y) * k; o.w = ow * k; if (o.type !== 'note') o.h = oh * k; drawItem(o); }
     updateGbox();
@@ -1094,7 +1106,8 @@ function setTool(t) {
 }
 addEventListener('keydown', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable)) return;
-  const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey;
+  // AltGr na Windows to Ctrl+Alt (polskie znaki) — nie traktujemy go jak Ctrl
+  const k = e.key.toLowerCase(), mod = (e.metaKey || e.ctrlKey) && !(!isMac && e.ctrlKey && e.altKey);
   if (keysOpen()) { if (k === 'escape' || k === '?') { e.preventDefault(); toggleKeys(false); } return; }
   if (k === '?') { e.preventDefault(); toggleKeys(true); return; }
   // pełny ekran: Ctrl+spacja na Windows (na Macu systemowe ⌃⌘F); Esc wychodzi, jeśli pełny ekran włączono stąd
@@ -1706,7 +1719,7 @@ window.blatTest = {
       this.undo(); rebind();
       // równe odstępy: trzeci obraz przyciąga się do odstępu jak między pierwszymi dwoma
       put(); b.y = 0; b.h = 300; b.w = 300; c.y = 0; c.x = 900 + 7; drawAll(); fit([a, b, c]); await new Promise(r => setTimeout(r, 30));   // odstęp a–b = 100, b–c = 107
-      [fx, fy] = scr(c.x + 50, c.y + 50); [tx, ty] = [fx - 5, fy]; await drag(els.get(c.id), fx, fy, tx, ty);   // 5 px na ekranie w lewo, w każdym powiększeniu ok(c.x - (b.x + b.w) === 100, 'przyciąganie do równego odstępu');
+      [fx, fy] = scr(c.x + 50, c.y + 50); [tx, ty] = [fx - 5, fy]; await drag(els.get(c.id), fx, fy, tx, ty); ok(c.x - (b.x + b.w) === 100, 'przyciąganie do równego odstępu');   // 5 px na ekranie w lewo, w każdym powiększeniu
       // zmiana rozmiaru przyciąga prawą krawędź do krawędzi innego obrazu
       put(); a.y = 400; drawAll(); sel = new Set([a.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
       const hd = els.get(a.id).querySelector('.hd'), [cx0, cy0] = scr(a.x + a.w, a.y + a.h); [tx, ty] = scr(b.x + b.w - 4 / board.view.z, a.y + a.h);   // chwyt dokładnie w rogu, róg 4 px przed krawędzią
@@ -1748,6 +1761,14 @@ window.blatTest = {
         ok(tool === t0 && board.items.length === n0, 'Alt + litera bez zaznaczenia nie włącza zwykłych skrótów');
         put(); sel = new Set(ids); const u0 = undoStack.length; dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true })); for (let i = 0; i < 3; i++) dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, repeat: true }));
         ok(undoStack.length === u0 + 1, 'przytrzymany skrót wyrównania to jeden krok cofania'); dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true })); ok(undoStack.length === u0 + 1, 'wyrównanie bez zmiany nie dodaje kroku cofania'); }
+      // kreska obrazu spoza ramki, leżąca w ramce, jedzie przy wyrównaniu tylko raz (z obrazem)
+      { put(); a.y = -100; c.y = 0; c.x = 900; drawAll(); const fr3 = { id: uid(), type: 'frame', x: 900, y: 150, w: 400, h: 300, name: 'r', z: 0 }; board.items.push(fr3);
+        const st = byId(this.stroke([[c.x + 50, c.y + 200], [c.x + 90, c.y + 220]])); st.parent = c.id; drawAll(); const dx0 = st.x - c.x, dy0 = st.y - c.y;
+        sel = new Set([a.id, c.id, fr3.id, st.id]); this.align('top'); ok(Math.abs(st.x - c.x - dx0) < 1 && Math.abs(st.y - c.y - dy0) < 1, 'kreska obrazu spoza ramki leżąca w ramce jedzie tylko z obrazem');
+        sel = new Set([fr3.id, st.id]); removeSel(); }
+      // AltGr na Windows (Ctrl+Alt) to polskie znaki, nie skróty z Ctrl
+      if (!isMac) { put(); sel = new Set([a.id]); const n0 = board.items.length; dispatchEvent(new KeyboardEvent('keydown', { key: 'd', code: 'KeyD', ctrlKey: true, altKey: true }));
+        dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', ctrlKey: true, altKey: true })); ok(board.items.length === n0, 'AltGr + litera nie powiela i nie tworzy ramki'); }
       // obraz zaznaczony razem ze swoją kreską ma uchwyt zmiany rozmiaru
       { put(); const st = byId(this.stroke([[a.x + 20, a.y + 20], [a.x + 60, a.y + 30]])); sel = new Set([a.id, st.id]); drawAll(); ok(!!els.get(a.id).querySelector('.hd'), 'obraz zaznaczony z kreską ma uchwyt zmiany rozmiaru'); sel = new Set([st.id]); removeSel(); }
       sel = new Set(ids); removeSel(); await this.open(name); await api.boardTrash(tb); await refreshBoards(); fit(); }
