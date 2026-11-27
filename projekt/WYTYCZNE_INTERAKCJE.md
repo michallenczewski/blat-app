@@ -190,7 +190,7 @@ We wszystkich programach z rodziny ustawienia są w **tym samym miejscu i pod t�
   1. **Jasny motyw / Ciemny motyw / Motyw jak w systemie** (zaznaczony ✓; „jak w systemie” to domyślny
      i reaguje na zmianę motywu w systemie). Osobnego przycisku motywu nie ma.
   2. **Skróty klawiszowe** (skrót `?`). Osobnego przycisku ściągi nie ma; klawisz `?` działa zawsze.
-  3. Opcje danego programu (np. w Blacie: kółko myszy, aktywowanie po najechaniu).
+  3. Opcje danego programu (np. w Blacie: **Ukryj interfejs** ze skrótem Tab, jeśli program ma tryb bez nawigacji; kółko myszy, aktywowanie po najechaniu).
   4. Na dole, przygaszony, **numer wersji** („Blat 0.2.5”), a pod nim **Sprawdź aktualizacje** albo
      **Zainstaluj wersję X** (w kolorze akcentu), gdy jest nowsza. W trakcie w tym samym miejscu:
      „Pobieram wersję X — 40%”, „Instaluję…”, na Macu „Przeciągnij [program] do Programów”.

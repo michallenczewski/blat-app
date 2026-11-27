@@ -991,6 +991,8 @@ function showSettings() {
     '-',
     [_t('Skróty klawiszowe'), () => toggleKeys(true), '?'],
     '-',
+    [_t('Ukryj interfejs'), () => toggleBare(true), 'Tab'],   // w trybie bez nawigacji przycisku ustawień nie widać, więc tylko „ukryj”
+    '-',
     [_t('Kółko myszy przybliża'), () => setWheelMode('zoom'), wheelMode === 'zoom' ? '✓' : ''],
     [_t('Kółko myszy przesuwa'), () => setWheelMode('pan'), wheelMode === 'pan' ? '✓' : ''],
     '-',
@@ -1406,6 +1408,10 @@ window.blatTest = {
       ok($('#setBtn').classList.contains('upd'), 'nowa wersja: kropka na przycisku ustawień');
       showSettings(); ok($('#menu').innerText.includes(_t('Instaluję…')), 'stan aktualizacji w menu ustawień'); hideMenu();
       updShow({ state: 'none', current: '0.2.6' }); ok(!$('#setBtn').classList.contains('upd'), 'bez nowej wersji nie ma kropki'); updState = u0; updShow(u0); }
+    // ustawienia mają „Ukryj interfejs” (Tab), jak menu kontekstowe płótna (prośba Michała 27.11)
+    { showSettings(); const row = [...$('#menu').querySelectorAll('button')].find(x => x.firstChild.textContent === _t('Ukryj interfejs'));
+      ok(row && row.querySelector('kbd') && row.querySelector('kbd').textContent === 'Tab', 'w ustawieniach jest „Ukryj interfejs” ze skrótem Tab');
+      if (row) row.click(); ok(isBare(), '„Ukryj interfejs” w ustawieniach chowa interfejs'); toggleBare(false); hideMenu(); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();
