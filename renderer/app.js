@@ -222,9 +222,9 @@ function drawItem(it) {
   el.classList.toggle('sel', sel.has(it.id));
   let hd = el.querySelector('.hd');
   const showHd = sel.has(it.id) && it.type !== 'drawing' && soloSel();   // jeden element (kreski zaznaczone razem z nim się nie liczą)
-  if (showHd && !hd) { hd = document.createElement('span'); hd.className = 'hd br'; el.appendChild(hd); }
-  if (!showHd && hd) hd.remove();
-  if (hd) { const k = 1 / board.view.z; hd.style.transform = 'scale(' + k + ')'; hd.style.transformOrigin = '100% 100%'; }
+  if (showHd && !hd) { addHandles(el); hd = true; }
+  if (!showHd && hd) for (const h of el.querySelectorAll('.hd')) h.remove();
+  if (hd) scaleHandles(el);
   if (it.type === 'note' && el.isConnected) it.h = Math.max(20, el.offsetHeight);   // wysokość notatki wynika z tekstu
 }
 // czy zaznaczony jest dokładnie jeden element (kreski zaznaczone razem z nim się nie liczą); liczone raz na stan zaznaczenia
@@ -748,14 +748,25 @@ function snapMove(box, exclude, noSnap) {
   if (useGy) drawSpacing('y', gy, out); else if (ay) drawGuide('h', ay.v, out, ay.b);
   return out;
 }
+// Zmiana rozmiaru za narożnik c ('tl', 'tr', 'bl', 'br'): przeciwległy narożnik stoi, przeciągany przyciąga się do linii innych.
+function resizeCorner(b0, c, mx, my, exclude, keepRatio, minW, noSnap) {
+  const sx = c[1] === 'r' ? 1 : -1, sy = c[0] === 'b' ? 1 : -1;
+  const ax = sx > 0 ? b0.x : b0.x + b0.w, ay = sy > 0 ? b0.y : b0.y + b0.h;   // narożnik, który stoi
+  // odbicie do przypadku „prawy dolny” względem stojącego narożnika, a potem z powrotem
+  const r = resizeBox({ x: 0, y: 0, w: b0.w, h: b0.h }, (mx - ax) * sx, (my - ay) * sy, exclude, keepRatio, minW, noSnap, { ax, ay, sx, sy });
+  return { x: sx > 0 ? ax : ax - r.w, y: sy > 0 ? ay : ay - r.h, w: r.w, h: r.h };
+}
 // zmiana rozmiaru za prawy dolny róg: lewy górny stoi, prawy dolny przyciąga się do linii innych elementów
-function resizeBox(b0, mx, my, exclude, keepRatio, minW, noSnap) {
+// (fr: odbicie z resizeCorner — przeciągany narożnik w układzie świata to ax + sx·x, ay + sy·y)
+function resizeBox(b0, mx, my, exclude, keepRatio, minW, noSnap, fr) {
+  fr = fr || { ax: 0, ay: 0, sx: 1, sy: 1 };
+  const toW = (v, a, s) => fr[a] + fr[s] * v, toL = (v, a, s) => (v - fr[a]) * fr[s];
   clearGuides();
   let sx = null, sy = null;
   if (!noSnap) {
     const th = SNAP_PX / board.view.z, { xs, ys } = snapTargets(exclude);
-    sx = bestSnap([mx], xs, th); sy = bestSnap([my], ys, th);
-    if (sx) mx += sx.d; if (sy) my += sy.d;
+    sx = bestSnap([toW(mx, 'ax', 'sx')], xs, th); sy = bestSnap([toW(my, 'ay', 'sy')], ys, th);
+    if (sx) mx = toL(toW(mx, 'ax', 'sx') + sx.d, 'ax', 'sx'); if (sy) my = toL(toW(my, 'ay', 'sy') + sy.d, 'ay', 'sy');
   }
   let w = Math.max(minW, mx - b0.x), h = Math.max(minW, my - b0.y);
   if (keepRatio) {
@@ -766,19 +777,27 @@ function resizeBox(b0, mx, my, exclude, keepRatio, minW, noSnap) {
     if (w < minW) { w = minW; h = w / r; }
   }
   const out = { x: b0.x, y: b0.y, w, h };
-  if (sx && Math.abs(sx.v - (out.x + w)) < .75) drawGuide('v', sx.v, out, sx.b);
-  if (sy && Math.abs(sy.v - (out.y + h)) < .75) drawGuide('h', sy.v, out, sy.b);
+  const wb = { x: fr.sx > 0 ? fr.ax : fr.ax - w, y: fr.sy > 0 ? fr.ay : fr.ay - h, w, h };   // ramka w świecie (do linii pomocniczych)
+  if (sx && Math.abs(sx.v - toW(w, 'ax', 'sx')) < .75) drawGuide('v', sx.v, wb, sx.b);
+  if (sy && Math.abs(sy.v - toW(h, 'ay', 'sy')) < .75) drawGuide('h', sy.v, wb, sy.b);
   return out;
 }
 // wspólna ramka kilku zaznaczonych, z uchwytem do skalowania wszystkich naraz
+// uchwyty zmiany rozmiaru we wszystkich czterech narożnikach; stała wielkość na ekranie w każdym powiększeniu
+const CORNERS = ['tl', 'tr', 'bl', 'br'];
+function addHandles(el) { for (const c of CORNERS) { const h = document.createElement('span'); h.className = 'hd ' + c; h.dataset.c = c; el.appendChild(h); } }
+function scaleHandles(el) {
+  const k = 1 / board.view.z;
+  for (const h of el.querySelectorAll('.hd')) { const c = h.dataset.c; h.style.transform = 'scale(' + k + ')'; h.style.transformOrigin = (c[1] === 'l' ? '0' : '100%') + ' ' + (c[0] === 't' ? '0' : '100%'); }
+}
 function updateGbox() {
   let g = $('#gbox');
   const list = drag && drag.kind === 'gresize' ? null : selItems().filter(i => i.type !== 'drawing');
   if (list && (list.length < 2 || tool !== 'select')) { if (g) g.style.display = 'none'; return; }
-  if (!g) { g = document.createElement('div'); g.id = 'gbox'; g.innerHTML = '<span class="hd br"></span>'; world.appendChild(g); }
+  if (!g) { g = document.createElement('div'); g.id = 'gbox'; addHandles(g); world.appendChild(g); }
   const b = list ? bbox(list) : drag.cur, k = 1 / board.view.z;
   Object.assign(g.style, { display: 'block', left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px', zIndex: 100000 });
-  g.style.setProperty('--k', k); const hd = g.firstChild; hd.style.transform = 'scale(' + k + ')'; hd.style.transformOrigin = '100% 100%';
+  g.style.setProperty('--k', k); scaleHandles(g);
 }
 
 /* ---------- widok ---------- */
@@ -826,11 +845,13 @@ main.addEventListener('pointerdown', e => {
     const ms = movingSet(), list = [...ms].map(byId).filter(Boolean), b0 = bbox(list.filter(i => i.type !== 'drawing'));
     // najmniejszy element nie schodzi poniżej 24 px (chyba że już był mniejszy — wtedy nie zmniejszamy wcale)
     const minDim = Math.min(...list.filter(i => i.type !== 'drawing').map(i => Math.min(i.w, i.type === 'note' ? i.w : i.h)));
-    drag = { kind: 'gresize', moved: false, b0, cur: b0, kMin: Math.min(1, 24 / minDim), gx: b0.x + b0.w - w.x, gy: b0.y + b0.h - w.y, ms, start: list.map(o => [o, o.x, o.y, o.w, o.h]) };
+    const c = e.target.dataset.c || 'br', cx = c[1] === 'r' ? b0.x + b0.w : b0.x, cy = c[0] === 'b' ? b0.y + b0.h : b0.y;
+    drag = { kind: 'gresize', moved: false, b0, cur: b0, c, kMin: Math.min(1, 24 / minDim), gx: cx - w.x, gy: cy - w.y, ms, start: list.map(o => [o, o.x, o.y, o.w, o.h]) };
   }
   else if (e.target.classList.contains('hd') && item) {
-    drag = { kind: 'resize', moved: false, item, ox: w.x, oy: w.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0,
-      gx: item.x + item.w - w.x, gy: item.y + item.h - w.y, kids: kidsOf(item.id).map(c => [c, c.x, c.y, c.w, c.h]) };
+    const c = e.target.dataset.c || 'br', cx = c[1] === 'r' ? item.x + item.w : item.x, cy = c[0] === 'b' ? item.y + item.h : item.y;
+    drag = { kind: 'resize', moved: false, item, c, x0: item.x, y0: item.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0,
+      gx: cx - w.x, gy: cy - w.y, kids: kidsOf(item.id).map(k => [k, k.x, k.y, k.w, k.h]) };
     drag.ex = new Set([item.id, ...drag.kids.map(c => c[0].id)]);   // raz na przeciąganie (snapCache)
   } else if (item) {
     if (e.shiftKey || e.metaKey || e.ctrlKey) { sel.has(item.id) ? sel.delete(item.id) : sel.add(item.id); }
@@ -872,16 +893,20 @@ main.addEventListener('pointermove', e => {
     updateGbox();
   } else if (drag.kind === 'gresize') {
     if (!drag.moved) { drag.moved = true; snapshot(); }
-    const b0 = drag.b0, nb = resizeBox(b0, w.x + drag.gx, w.y + drag.gy, drag.ms, true, 24, e.altKey), k = Math.max(drag.kMin, nb.w / b0.w);
+    const b0 = drag.b0, c = drag.c, nb = resizeCorner(b0, c, w.x + drag.gx, w.y + drag.gy, drag.ms, true, 24, e.altKey), k = Math.max(drag.kMin, nb.w / b0.w);
     if (nb.w / b0.w < drag.kMin) clearGuides();   // przy dolnej granicy ramka nie stoi na linii, do której przyciągnęło
-    drag.cur = { x: b0.x, y: b0.y, w: b0.w * k, h: b0.h * k };
-    for (const [o, x, y, ow, oh] of drag.start) { o.x = b0.x + (x - b0.x) * k; o.y = b0.y + (y - b0.y) * k; o.w = ow * k; if (o.type !== 'note') o.h = oh * k; drawItem(o); }
+    const W = b0.w * k, H = b0.h * k, X = c[1] === 'r' ? b0.x : b0.x + b0.w - W, Y = c[0] === 'b' ? b0.y : b0.y + b0.h - H;   // przeciwległy narożnik stoi
+    drag.cur = { x: X, y: Y, w: W, h: H };
+    for (const [o, x, y, ow, oh] of drag.start) { o.x = X + (x - b0.x) * k; o.y = Y + (y - b0.y) * k; o.w = ow * k; if (o.type !== 'note') o.h = oh * k; drawItem(o); }
     updateGbox();
   } else if (drag.kind === 'resize') {
     if (!drag.moved) { drag.moved = true; snapshot(); }   // krok cofania dopiero przy prawdziwej zmianie rozmiaru
-    const it = drag.item, nb = resizeBox({ x: it.x, y: it.y, w: drag.w0, h: drag.h0 }, w.x + drag.gx, w.y + drag.gy, drag.ex, !!drag.ratio, 24, e.altKey);
-    it.w = Math.round(nb.w); if (it.type !== 'note') it.h = Math.round(nb.h); drawItem(it);
-    const k = it.w / drag.w0; for (const [c, x, y, cw, ch] of drag.kids) { c.x = it.x + (x - it.x) * k; c.y = it.y + (y - it.y) * k; c.w = cw * k; c.h = ch * k; drawItem(c); }
+    const it = drag.item, note = it.type === 'note', c = note ? 'b' + drag.c[1] : drag.c;   // notatka: wysokość z tekstu, zmienia się tylko szerokość
+    const nb = resizeCorner({ x: drag.x0, y: drag.y0, w: drag.w0, h: drag.h0 }, c, w.x + drag.gx, note ? drag.y0 + drag.h0 : w.y + drag.gy, drag.ex, !!drag.ratio, 24, e.altKey);
+    it.w = Math.round(nb.w); it.x = Math.round(c[1] === 'r' ? drag.x0 : drag.x0 + drag.w0 - it.w);
+    if (!note) { it.h = Math.round(nb.h); it.y = Math.round(c[0] === 'b' ? drag.y0 : drag.y0 + drag.h0 - it.h); }
+    drawItem(it);
+    const k = it.w / drag.w0; for (const [kd, x, y, cw, ch] of drag.kids) { kd.x = it.x + (x - drag.x0) * k; kd.y = it.y + (y - drag.y0) * k; kd.w = cw * k; kd.h = ch * k; drawItem(kd); }
   } else if (drag.kind === 'newframe') {
     const f = drag.f; f.x = Math.min(drag.ox, w.x); f.y = Math.min(drag.oy, w.y); f.w = Math.abs(w.x - drag.ox); f.h = Math.abs(w.y - drag.oy); drawItem(f);
   } else if (drag.kind === 'marq') {
@@ -1812,16 +1837,35 @@ window.blatTest = {
       [fx, fy] = scr(c.x + 50, c.y + 50); [tx, ty] = [fx - 5, fy]; await drag(els.get(c.id), fx, fy, tx, ty); ok(c.x - (b.x + b.w) === 100, 'przyciąganie do równego odstępu');   // 5 px na ekranie w lewo, w każdym powiększeniu
       // zmiana rozmiaru przyciąga prawą krawędź do krawędzi innego obrazu
       put(); a.y = 400; drawAll(); sel = new Set([a.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
-      const hd = els.get(a.id).querySelector('.hd'), [cx0, cy0] = scr(a.x + a.w, a.y + a.h); [tx, ty] = scr(b.x + b.w - 4 / board.view.z, a.y + a.h);   // chwyt dokładnie w rogu, róg 4 px przed krawędzią
+      const hd = els.get(a.id).querySelector('.hd.br'), [cx0, cy0] = scr(a.x + a.w, a.y + a.h); [tx, ty] = scr(b.x + b.w - 4 / board.view.z, a.y + a.h);   // chwyt dokładnie w rogu, róg 4 px przed krawędzią
       await drag(hd, cx0, cy0, tx, ty); ok(a.x + a.w === b.x + b.w, 'zmiana rozmiaru przyciąga się do krawędzi innego obrazu');
       // skalowanie wielu: wspólna ramka zaznaczenia z uchwytem, proporcje i odległości skalują się razem
       put(); sel = new Set([a.id, b.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
-      const gb = $('#gbox'), gh = gb && gb.querySelector('.hd'); ok(gb && gb.style.display !== 'none' && gh, 'przy kilku zaznaczonych jest wspólna ramka z uchwytem');
+      const gb = $('#gbox'), gh = gb && gb.querySelector('.hd.br'); ok(gb && gb.style.display !== 'none' && gh, 'przy kilku zaznaczonych jest wspólna ramka z uchwytem');
       if (gh) { const box0 = bbox([a, b]), bx0 = b.x - a.x, [gx0, gy0] = scr(box0.x + box0.w, box0.y + box0.h); [tx, ty] = scr(box0.x + box0.w * 1.5, box0.y + box0.h * 1.5);
         await drag(gh, gx0, gy0, tx, ty, { altKey: true }); const k = a.w / 400;
         ok(Math.abs(k - 1.5) < .02 && Math.abs(b.w / 300 - k) < .02 && Math.abs((b.x - a.x) / bx0 - k) < .02 && a.x === 0 && a.y === 0, 'skalowanie wielu elementów naraz od lewego górnego rogu');
         this.undo(); rebind(); ok(a.w === 400 && b.w === 300, 'cofnięcie skalowania wielu'); }
       sel = new Set([a.id]); drawAll(); ok(!$('#gbox') || $('#gbox').style.display === 'none', 'przy jednym zaznaczonym nie ma wspólnej ramki');
+      // skalowanie za każdy z czterech narożników (prośba Michała 27.11): przeciwległy narożnik stoi w miejscu
+      { put(); sel = new Set([a.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
+        ok(els.get(a.id).querySelectorAll('.hd').length === 4, 'zaznaczony obraz ma uchwyty we wszystkich czterech narożnikach');
+        const r0 = { x: a.x, y: a.y, w: a.w, h: a.h }, [hx, hy] = scr(a.x, a.y), [tx3, ty3] = scr(a.x - 100, a.y - 75);
+        await drag(els.get(a.id).querySelector('.hd.tl'), hx, hy, tx3, ty3, { altKey: true });
+        ok(Math.abs(a.x + a.w - (r0.x + r0.w)) <= 1 && Math.abs(a.y + a.h - (r0.y + r0.h)) <= 1 && Math.abs(a.w - 500) <= 2 && Math.abs(a.w / a.h - 4 / 3) < .02, 'lewy górny narożnik: prawy dolny stoi, proporcje zostają');
+        this.undo(); rebind(); put(); sel = new Set([a.id]); drawAll();
+        const [hx2, hy2] = scr(a.x + a.w, a.y), [tx4, ty4] = scr(a.x + a.w + 100, a.y - 75); await drag(els.get(a.id).querySelector('.hd.tr'), hx2, hy2, tx4, ty4, { altKey: true });
+        ok(a.x === 0 && Math.abs(a.y + a.h - 300) <= 1 && Math.abs(a.w - 500) <= 2, 'prawy górny narożnik: lewy dolny stoi'); this.undo(); rebind();
+        // wspólna ramka kilku: lewy dolny narożnik, prawy górny róg ramki stoi
+        put(); sel = new Set([a.id, b.id]); drawAll(); const g0 = bbox([a, b]); ok($('#gbox').querySelectorAll('.hd').length === 4, 'wspólna ramka ma cztery uchwyty');
+        const [gx1, gy1] = scr(g0.x, g0.y + g0.h), [gx2, gy2] = scr(g0.x - g0.w * .5, g0.y + g0.h * 1.5); await drag($('#gbox .hd.bl'), gx1, gy1, gx2, gy2, { altKey: true }); rebind();
+        const g1 = bbox([a, b]); ok(Math.abs(g1.x + g1.w - (g0.x + g0.w)) <= 2 && Math.abs(g1.y - g0.y) <= 2 && Math.abs(g1.w / g0.w - 1.5) < .02, 'wspólna ramka: lewy dolny narożnik, prawy górny stoi'); this.undo(); rebind();
+        // lewy narożnik też przyciąga się do krawędzi innego obrazu
+        put(); sel = new Set([b.id]); drawAll(); const [bx1, by1] = scr(b.x, b.y), [bx2, by2] = scr(400 + 3 / board.view.z, b.y);
+        await drag(els.get(b.id).querySelector('.hd.tl'), bx1, by1, bx2, by2); rebind(); ok(b.x === 400 && b.x + b.w === 800, 'lewy narożnik przyciąga się do krawędzi innego obrazu'); this.undo(); rebind();
+        // notatka za lewy narożnik: zmienia się szerokość, prawa krawędź stoi
+        const nt = byId(this.note(0, 600, 'notatka')); nt.w = 300; sel = new Set([nt.id]); drawAll(); const right0 = nt.x + nt.w, [nx, ny] = scr(nt.x, nt.y), [nx2] = scr(nt.x - 80, 0);
+        await drag(els.get(nt.id).querySelector('.hd.tl'), nx, ny, nx2, ny, { altKey: true }); ok(Math.abs(nt.x + nt.w - right0) <= 1 && Math.abs(nt.w - 380) <= 2, 'notatka za lewy narożnik: prawa krawędź stoi'); sel = new Set([nt.id]); removeSel(); }
       // ===== po recenzji =====
       // przesunięcie samej kreski (bez obrazu pod spodem) nie psuje jej położenia
       { put(); const st = byId(this.stroke([[1300, 600], [1400, 650]])); sel = new Set([st.id]); drawAll(); const [p0, q0] = scr(st.x + 2, st.y + 2);
@@ -1831,7 +1875,7 @@ window.blatTest = {
       // skalowanie wielu w dół nie zmniejsza żadnego elementu poniżej 24 px
       { put(); a.w = 2000; a.h = 1500; b.x = 2100; b.y = 0; b.w = 40; b.h = 30; drawAll(); sel = new Set([a.id, b.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
         const box0 = bbox([a, b]), [gx0, gy0] = scr(box0.x + box0.w, box0.y + box0.h), [tx2, ty2] = scr(box0.x + 10, box0.y + 10);
-        await drag($('#gbox .hd'), gx0, gy0, tx2, ty2, { altKey: true }); rebind(); ok(Math.min(b.w, b.h) >= 23.5 && a.h > 0, 'skalowanie wielu nie zmniejsza elementu poniżej 24 px'); this.undo(); rebind(); }
+        await drag($('#gbox .hd.br'), gx0, gy0, tx2, ty2, { altKey: true }); rebind(); ok(Math.min(b.w, b.h) >= 23.5 && a.h > 0, 'skalowanie wielu nie zmniejsza elementu poniżej 24 px'); this.undo(); rebind(); }
       // wspólna szerokość notatek w kolumnie: zawinięty tekst nie najeżdża na następną notatkę
       { const n1 = byId(this.note(0, 1000, 'Długi tekst notatki, który po zwężeniu do wąskiej kolumny zawinie się w kilka wierszy i urośnie w dół.')), n2 = byId(this.note(0, 1100, 'krótka'));
         n1.w = 600; n2.w = 200; n2.y = n1.y + n1.h + 20; drawAll(); sel = new Set([n1.id, n2.id]); this.align('sameW');
