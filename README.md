@@ -2,7 +2,7 @@
 
 Lekki blat na referencje i szkice koncepcji, na Windows i Maca. Siostra [Gapy](https://github.com/michallenczewski/gapa).
 
-Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopisz notatkę, zbierz grupę w ramkę i ułóż ją jednym klawiszem. Blaty zapisują się same w `Dokumenty/Blat`.
+Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopisz notatkę, zbierz grupę w ramkę i ułóż ją jednym klawiszem. Przesuwane elementy przyciągają się do krawędzi, środków i równych odstępów innych (jak w Blacie w przeglądarce i w Miro), kilka zaznaczonych skaluje się razem za róg wspólnej ramki, a przycisk układania wyrównuje je, daje wspólną wysokość albo równe odstępy. Blaty zapisują się same w `Dokumenty/Blat`.
 
 ## Skróty
 
@@ -11,6 +11,10 @@ Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopi
 | V, T, F | V, T, F | zaznaczanie, notatka, ramka |
 | ⌘G | Ctrl+G | ramka wokół zaznaczonych |
 | A | A | ułóż zaznaczone (albo zawartość ramki) |
+| ⌥A ⌥D ⌥W ⌥S | Alt+A Alt+D Alt+W Alt+S | wyrównaj do lewej, prawej, góry, dołu |
+| ⌥V ⌥H | Alt+V Alt+H | wyrównaj do osi pionowej / poziomej |
+| ⌥⇧H ⌥⇧V | Alt+Shift+H Alt+Shift+V | równe odstępy w poziomie / w pionie |
+| ⌥ + przeciąganie | Alt + przeciąganie | przesuwanie albo skalowanie bez przyciągania |
 | 0, 1, Z | 0, 1, Z | całość, 100%, dopasuj zaznaczone |
 | spacja albo ⌥ + przeciąganie | spacja albo Alt + przeciąganie | przesuwanie widoku |
 | kółko myszy | kółko myszy | przybliżanie (w ustawieniach — przycisk z suwakami w prawym górnym rogu — można zmienić na przesuwanie) |

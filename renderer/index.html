@@ -87,6 +87,17 @@ main{grid-row:2;position:relative;overflow:hidden;border-top-left-radius:12px;ba
 .it.frame.sel{outline-offset:0}
 .hd{position:absolute;width:9px;height:9px;background:var(--card);box-shadow:0 0 0 1.5px var(--text);border-radius:2px;z-index:5}
 .hd.br{right:-8px;bottom:-8px;cursor:nwse-resize}
+/* przyciąganie: linie pomocnicze (grubość 1 px na ekranie liczy app.js) i odstępy z kreseczkami na końcach */
+#guides{position:absolute;left:0;top:0;pointer-events:none;z-index:100001}
+.gd{position:absolute;background:#FF6B1A}
+.gd.gap::before,.gd.gap::after{content:"";position:absolute;background:#FF6B1A}
+.gd.gap.h::before,.gd.gap.h::after{top:calc(var(--t) * -4);width:var(--t);height:calc(var(--t) * 9)}
+.gd.gap.h::before{left:0}.gd.gap.h::after{right:0}
+.gd.gap.v::before,.gd.gap.v::after{left:calc(var(--t) * -4);height:var(--t);width:calc(var(--t) * 9)}
+.gd.gap.v::before{top:0}.gd.gap.v::after{bottom:0}
+/* wspólna ramka kilku zaznaczonych z uchwytem do skalowania wszystkich naraz */
+#gbox{position:absolute;pointer-events:none;outline:calc(1px * var(--k, 1)) dashed var(--muted);outline-offset:calc(6px * var(--k, 1))}
+#gbox .hd{pointer-events:auto;right:-8px;bottom:-8px}
 #marq{position:absolute;box-shadow:inset 0 0 0 1px var(--muted);background:rgba(128,128,128,.08);border-radius:2px;display:none;pointer-events:none}
 .zoom{position:absolute;right:16px;bottom:12px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);pointer-events:none}
 .zoom b{font-weight:400;color:var(--text2)}

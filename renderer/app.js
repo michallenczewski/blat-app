@@ -240,6 +240,7 @@ function drawAll() {
   for (const [id, el] of els) if (!ids.has(id)) { el.remove(); els.delete(id); }
   for (const it of board.items) drawItem(it);   // ramki (z licznikiem zawartości) też tu
   main.classList.toggle('isempty', board.items.length === 0);
+  updateGbox();
 }
 function frameCounts() { for (const f of board.items) if (f.type === 'frame') drawItem(f); }
 function applyView() {
@@ -247,7 +248,7 @@ function applyView() {
   world.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.z + ')';
   $('#zoomPct').textContent = Math.round(v.z * 100) + '%';
   clearTimeout(applyView.t);
-  applyView.t = setTimeout(() => { for (const it of board.items) if (it.type === 'image' || it.type === 'drawing' || sel.has(it.id)) drawItem(it); }, 160);   // podmiana miniatura/pełny obraz po zakończeniu przybliżania
+  applyView.t = setTimeout(() => { for (const it of board.items) if (it.type === 'image' || it.type === 'drawing' || sel.has(it.id)) drawItem(it); updateGbox(); }, 160);   // podmiana miniatura/pełny obraz po zakończeniu przybliżania
 }
 
 /* ---------- zapis, cofanie ---------- */
@@ -551,6 +552,211 @@ function glide(items, before) {
   els2.forEach((el, n) => { el.style.transition = 'transform .5s var(--spring) ' + Math.min(n * 12, 160) + 'ms'; el.style.transform = ''; el.addEventListener('transitionend', done); });
 }
 
+
+/* ---------- wyrównywanie i rozkładanie (menu przycisku układania, prawy przycisk, skróty ⌥ / Alt) ---------- */
+// Jednostki: ramka razem z zawartością albo pojedynczy obraz lub notatka; kreski mazaka jadą za swoim obrazem.
+function alignUnits() {
+  const list = selItems().filter(i => i.type !== 'drawing'), used = new Set(), units = [];
+  for (const f of list.filter(i => i.type === 'frame')) {
+    const items = [f, ...board.items.filter(o => o.type !== 'frame' && o.type !== 'drawing' && !used.has(o.id) && inside(o, f))];
+    items.forEach(o => used.add(o.id)); units.push({ b: f, items });
+  }
+  for (const i of list) if (i.type !== 'frame' && !used.has(i.id)) units.push({ b: i, items: [i] });
+  return units;
+}
+function shake(msg) { const b = $('#arrangeBtn'); b.classList.remove('tak', 'nie'); void b.offsetWidth; b.classList.add('nie'); if (msg) tip(msg); }
+function nod() { const b = $('#arrangeBtn'); b.classList.remove('tak', 'nie'); void b.offsetWidth; b.classList.add('tak'); }
+// Wspólna wysokość (szerokość): mediana zaznaczonych, proporcje obrazów zostają. Lewy górny róg każdego zostaje,
+// a jeśli elementy stały w rzędzie (kolumnie), zostają też odstępy między nimi — nic na siebie nie najeżdża.
+function sameSize(units, dim) {
+  const P = dim === 'h' ? 'x' : 'y', S = dim === 'h' ? 'w' : 'h', T = dim;
+  const us = units.filter(u => u.items.length === 1 && (u.b.type === 'image' || (dim === 'w' && u.b.type === 'note')));
+  if (us.length < 2) return false;
+  const vals = us.map(u => u.b[T]).sort((a, c) => a - c), V = Math.round(vals[Math.floor((vals.length - 1) / 2)]);
+  us.sort((p, q) => p.b[P] - q.b[P]);
+  const o = us.map(u => ({ x: u.b.x, y: u.b.y, w: u.b.w, h: u.b.h }));
+  const row = us.every((u, i) => !i || o[i][P] >= o[i - 1][P] + o[i - 1][S]);   // stoją jeden za drugim bez nachodzenia
+  us.forEach((u, i) => {
+    const it = u.b, k = V / it[T];
+    if (it.type === 'note') it.w = V; else { it.w = Math.round(it.w * k); it.h = Math.round(it.h * k); }
+    if (row && i) it[P] = Math.round(us[i - 1].b[P] + us[i - 1].b[S] + (o[i][P] - o[i - 1][P] - o[i - 1][S]));
+    followParent(it, o[i]);
+  });
+  return true;
+}
+function alignSel(how) {
+  const units = alignUnits();
+  if (units.length < 2) { shake(_t('Zaznacz co najmniej dwa elementy')); return; }
+  if ((how === 'dx' || how === 'dy') && units.length < 3) { shake(_t('Równe odstępy potrzebują co najmniej trzech elementów')); return; }
+  const moved = units.flatMap(u => u.items.flatMap(i => [i, ...kidsOf(i.id)])), before = new Map(moved.map(i => [i.id, { x: i.x, y: i.y, w: i.w, h: i.h }]));
+  const all = bbox(units.map(u => u.b));
+  snapshot();
+  const move = (u, dx, dy) => { dx = Math.round(dx); dy = Math.round(dy); if (!dx && !dy) return; for (const i of u.items) { const o = { x: i.x, y: i.y, w: i.w, h: i.h }; i.x += dx; i.y += dy; if (i.type === 'image') followParent(i, o); } };
+  if (how === 'left') units.forEach(u => move(u, all.x - u.b.x, 0));
+  else if (how === 'right') units.forEach(u => move(u, all.x + all.w - u.b.x - u.b.w, 0));
+  else if (how === 'cx') units.forEach(u => move(u, all.x + all.w / 2 - u.b.x - u.b.w / 2, 0));
+  else if (how === 'top') units.forEach(u => move(u, 0, all.y - u.b.y));
+  else if (how === 'bottom') units.forEach(u => move(u, 0, all.y + all.h - u.b.y - u.b.h));
+  else if (how === 'cy') units.forEach(u => move(u, 0, all.y + all.h / 2 - u.b.y - u.b.h / 2));
+  else if (how === 'dx' || how === 'dy') {
+    // skrajne elementy zostają, środkowe dostają równe odstępy
+    const P = how === 'dx' ? 'x' : 'y', S = how === 'dx' ? 'w' : 'h';
+    const us = units.slice().sort((p, q) => p.b[P] + p.b[S] / 2 - q.b[P] - q.b[S] / 2);
+    const first = us[0].b, last = us[us.length - 1].b, span = last[P] + last[S] - first[P];
+    const gap = (span - us.reduce((t, u) => t + u.b[S], 0)) / (us.length - 1);
+    let at = first[P] + first[S] + gap;
+    for (const u of us.slice(1, -1)) { const d = at - u.b[P]; move(u, P === 'x' ? d : 0, P === 'y' ? d : 0); at += u.b[S] + gap; }
+  }
+  else if (how === 'sameH' || how === 'sameW') { if (!sameSize(units, how === 'sameH' ? 'h' : 'w')) { undoStack.pop(); shake(_t('Zaznacz co najmniej dwa obrazy')); return; } }
+  drawAll(); changed(); glide(moved, before); nod();
+}
+const ALT = isMac ? '⌥' : 'Alt+', ALTSH = isMac ? '⌥⇧' : 'Alt+Shift+';
+function arrangeRows() {
+  return [
+    [_t('Ułóż w rzędach'), arrange, 'A'],
+    '-',
+    [_t('Wspólna wysokość'), () => alignSel('sameH')],
+    [_t('Wspólna szerokość'), () => alignSel('sameW')],
+    '-',
+    [_t('Wyrównaj do lewej'), () => alignSel('left'), ALT + 'A'],
+    [_t('Wyrównaj do osi pionowej'), () => alignSel('cx'), ALT + 'V'],
+    [_t('Wyrównaj do prawej'), () => alignSel('right'), ALT + 'D'],
+    [_t('Wyrównaj do góry'), () => alignSel('top'), ALT + 'W'],
+    [_t('Wyrównaj do osi poziomej'), () => alignSel('cy'), ALT + 'H'],
+    [_t('Wyrównaj do dołu'), () => alignSel('bottom'), ALT + 'S'],
+    '-',
+    [_t('Równe odstępy w poziomie'), () => alignSel('dx'), ALTSH + 'H'],
+    [_t('Równe odstępy w pionie'), () => alignSel('dy'), ALTSH + 'V'],
+  ];
+}
+function showArrangeMenu(x, y) {
+  if (x != null) { showMenu(x, y, arrangeRows()); return; }
+  const r = $('#arrangeBtn').getBoundingClientRect(); showMenu(r.left, r.bottom + 6, arrangeRows());
+  const m = $('#menu'); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px'; m.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 8)) + 'px';
+}
+
+/* ---------- przyciąganie (jak w Blacie w przeglądarce: snapMove, spacingSnap, resizeBox) ---------- */
+// Do krawędzi i środków innych elementów na ekranie oraz do równych odstępów; ⌥ / Alt w trakcie przeciągania wyłącza.
+const SNAP_PX = 6;   // próg na ekranie
+function guideLayer() { let g = $('#guides'); if (!g) { g = document.createElement('div'); g.id = 'guides'; world.appendChild(g); } return g; }
+function clearGuides() { const g = $('#guides'); if (g) g.innerHTML = ''; }
+// Linie i odstępy innych elementów liczymy raz na przeciąganie (w trakcie się nie zmieniają) — przy setkach
+// obrazów na ekranie liczenie odstępów co ruch myszy byłoby za wolne.
+let snapCache = null;
+function snapTargets(exclude) {
+  if (snapCache && snapCache.ex === exclude && snapCache.z === board.view.z && snapCache.vx === board.view.x && snapCache.vy === board.view.y) return snapCache.t;
+  const v = board.view, x0 = -v.x / v.z, y0 = -v.y / v.z, x1 = x0 + main.clientWidth / v.z, y1 = y0 + main.clientHeight / v.z;
+  const xs = [], ys = [], boxes = [];
+  for (const o of board.items) {
+    if (exclude.has(o.id) || o.type === 'drawing') continue;
+    if (o.x > x1 || o.x + o.w < x0 || o.y > y1 || o.y + o.h < y0) continue;   // tylko to, co widać
+    xs.push({ v: o.x, b: o }, { v: o.x + o.w / 2, b: o }, { v: o.x + o.w, b: o });
+    ys.push({ v: o.y, b: o }, { v: o.y + o.h / 2, b: o }, { v: o.y + o.h, b: o });
+    if (o.type !== 'frame') boxes.push(o);
+  }
+  const t = { xs, ys, boxes };
+  snapCache = { ex: exclude, z: v.z, vx: v.x, vy: v.y, t };
+  return t;
+}
+function bestSnap(ours, targets, th) {
+  let best = null;
+  for (const o of ours) for (const t of targets) { const d = t.v - o; if (Math.abs(d) <= th && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, v: t.v, b: t.b }; }
+  return best;
+}
+// taki sam odstęp jak między innymi elementami w rzędzie (kolumnie) albo dokładnie pośrodku między sąsiadami
+function spacingSnap(axis, box, boxes, th) {
+  const P = axis, S = axis === 'x' ? 'w' : 'h', Q = axis === 'x' ? 'y' : 'x', T = axis === 'x' ? 'h' : 'w';
+  const overlap = (a, b) => a[Q] < b[Q] + b[T] && a[Q] + a[T] > b[Q];
+  const memo = boxes.gaps || (boxes.gaps = {});
+  let gaps = memo[axis];
+  if (!gaps) {
+    gaps = memo[axis] = [];
+    for (const a of boxes) {
+      let best = null;
+      for (const b of boxes) { if (a === b || !overlap(a, b) || b[P] < a[P] + a[S]) continue; const g = b[P] - (a[P] + a[S]); if (!best || g < best.g) best = { g, a, b }; }
+      if (best && best.g > 0 && best.g < 2000) gaps.push(best);
+    }
+  }
+  const line = boxes.filter(o => overlap(o, box)), c = box[P] + box[S] / 2;
+  const before = line.filter(o => o[P] + o[S] <= c).sort((a, b) => b[P] + b[S] - (a[P] + a[S]))[0];
+  const after = line.filter(o => o[P] >= c).sort((a, b) => a[P] - b[P])[0];
+  let res = null;
+  const consider = (target, info) => { const d = target - box[P]; if (Math.abs(d) <= th && (!res || Math.abs(d) < Math.abs(res.d))) res = { d, ...info }; };
+  if (before && after) consider((before[P] + before[S] + after[P] - box[S]) / 2, { kind: 'center', before, after });
+  for (const gp of gaps) {
+    if (before) consider(before[P] + before[S] + gp.g, { kind: 'gap', n: before, side: 'before', gp });
+    if (after) consider(after[P] - gp.g - box[S], { kind: 'gap', n: after, side: 'after', gp });
+  }
+  return res;
+}
+function drawGuide(dir, v, a, b) {
+  const g = document.createElement('div'), pad = 12 / board.view.z, t = 1 / board.view.z;
+  g.className = 'gd';
+  if (dir === 'v') { const y0 = Math.min(a.y, b.y) - pad, y1 = Math.max(a.y + a.h, b.y + b.h) + pad; Object.assign(g.style, { left: v - t / 2 + 'px', top: y0 + 'px', width: t + 'px', height: y1 - y0 + 'px' }); }
+  else { const x0 = Math.min(a.x, b.x) - pad, x1 = Math.max(a.x + a.w, b.x + b.w) + pad; Object.assign(g.style, { top: v - t / 2 + 'px', left: x0 + 'px', height: t + 'px', width: x1 - x0 + 'px' }); }
+  guideLayer().appendChild(g);
+}
+// odcinek z kreseczkami na końcach pokazujący odstęp między a i b (a przed b)
+function drawGap(axis, a, b) {
+  const g = document.createElement('div'), t = 1 / board.view.z; g.className = 'gd gap ' + (axis === 'x' ? 'h' : 'v'); g.style.setProperty('--t', t + 'px');
+  if (axis === 'x') { const y = (Math.max(a.y, b.y) + Math.min(a.y + a.h, b.y + b.h)) / 2, x0 = a.x + a.w; Object.assign(g.style, { left: x0 + 'px', top: y - t / 2 + 'px', width: b.x - x0 + 'px', height: t + 'px' }); }
+  else { const x = (Math.max(a.x, b.x) + Math.min(a.x + a.w, b.x + b.w)) / 2, y0 = a.y + a.h; Object.assign(g.style, { top: y0 + 'px', left: x - t / 2 + 'px', height: b.y - y0 + 'px', width: t + 'px' }); }
+  guideLayer().appendChild(g);
+}
+function drawSpacing(axis, s, box) {
+  if (s.kind === 'center') { drawGap(axis, s.before, box); drawGap(axis, box, s.after); }
+  else { if (s.side === 'before') drawGap(axis, s.n, box); else drawGap(axis, box, s.n); drawGap(axis, s.gp.a, s.gp.b); }
+}
+function snapMove(box, exclude, noSnap) {
+  clearGuides();
+  if (noSnap) return { ...box, x: Math.round(box.x), y: Math.round(box.y) };
+  const th = SNAP_PX / board.view.z, { xs, ys, boxes } = snapTargets(exclude);
+  let { x, y } = box;
+  const ax = bestSnap([x, x + box.w / 2, x + box.w], xs, th), ay = bestSnap([y, y + box.h / 2, y + box.h], ys, th);
+  const gx = spacingSnap('x', box, boxes, th);
+  const useGx = gx && (!ax || Math.abs(gx.d) < Math.abs(ax.d) - .01);   // wyrównanie krawędzi wygrywa przy remisie
+  if (useGx) x += gx.d; else if (ax) x += ax.d;
+  const gy = spacingSnap('y', { ...box, x }, boxes, th);
+  const useGy = gy && (!ay || Math.abs(gy.d) < Math.abs(ay.d) - .01);
+  if (useGy) y += gy.d; else if (ay) y += ay.d;
+  const out = { ...box, x: Math.round(x), y: Math.round(y) };
+  if (useGx) drawSpacing('x', gx, out); else if (ax) drawGuide('v', ax.v, out, ax.b);
+  if (useGy) drawSpacing('y', gy, out); else if (ay) drawGuide('h', ay.v, out, ay.b);
+  return out;
+}
+// zmiana rozmiaru za prawy dolny róg: lewy górny stoi, prawy dolny przyciąga się do linii innych elementów
+function resizeBox(b0, mx, my, exclude, keepRatio, minW, noSnap) {
+  clearGuides();
+  let sx = null, sy = null;
+  if (!noSnap) {
+    const th = SNAP_PX / board.view.z, { xs, ys } = snapTargets(exclude);
+    sx = bestSnap([mx], xs, th); sy = bestSnap([my], ys, th);
+    if (sx) mx += sx.d; if (sy) my += sy.d;
+  }
+  let w = Math.max(minW, mx - b0.x), h = Math.max(minW, my - b0.y);
+  if (keepRatio) {
+    const r = b0.w / b0.h;
+    if (sx && (!sy || Math.abs(sx.d) <= Math.abs(sy.d))) h = w / r;
+    else if (sy) w = h * r;
+    else { const k = Math.max(w / b0.w, h / b0.h); w = b0.w * k; h = b0.h * k; }
+    if (w < minW) { w = minW; h = w / r; }
+  }
+  const out = { x: b0.x, y: b0.y, w, h };
+  if (sx && Math.abs(sx.v - (out.x + w)) < .75) drawGuide('v', sx.v, out, sx.b);
+  if (sy && Math.abs(sy.v - (out.y + h)) < .75) drawGuide('h', sy.v, out, sy.b);
+  return out;
+}
+// wspólna ramka kilku zaznaczonych, z uchwytem do skalowania wszystkich naraz
+function updateGbox() {
+  let g = $('#gbox');
+  const list = drag && drag.kind === 'gresize' ? null : selItems().filter(i => i.type !== 'drawing');
+  if (list && (list.length < 2 || tool !== 'select')) { if (g) g.style.display = 'none'; return; }
+  if (!g) { g = document.createElement('div'); g.id = 'gbox'; g.innerHTML = '<span class="hd br"></span>'; world.appendChild(g); }
+  const b = list ? bbox(list) : drag.cur, k = 1 / board.view.z;
+  Object.assign(g.style, { display: 'block', left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px', zIndex: 100000 });
+  g.style.setProperty('--k', k); const hd = g.firstChild; hd.style.transform = 'scale(' + k + ')'; hd.style.transformOrigin = '100% 100%';
+}
+
 /* ---------- widok ---------- */
 function zoomAt(f, cx, cy) {
   const v = board.view, r = main.getBoundingClientRect();
@@ -578,7 +784,7 @@ main.addEventListener('pointerdown', e => {
   main.focus({ preventScroll: true });
   hideMenu();
   const w = toWorld(e.clientX, e.clientY);
-  if (e.button === 1 || spaceDown || (e.button === 0 && e.altKey && !item)) {
+  if (e.button === 1 || spaceDown || (e.button === 0 && e.altKey && !item && !e.target.classList.contains('hd'))) {   // ⌥ na uchwycie: skalowanie bez przyciągania
     drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, vx: board.view.x, vy: board.view.y }; main.classList.add('panning');
   } else if (e.button !== 0) return;
   else if (tool === 'note') { addNote(w); setTool('select'); return; }
@@ -591,15 +797,20 @@ main.addEventListener('pointerdown', e => {
     drag = { kind: 'pen', pts: [[w.x, w.y]], sw, c: P[0], hl: !!P[2], live };
   }
   else if (tool === 'frame') { const redo0 = redoStack.slice(); snapshot(); const f = { id: uid(), type: 'frame', x: w.x, y: w.y, w: 1, h: 1, name: _t('Ramka'), z: 0 }; board.items.push(f); sel = new Set([f.id]); drawAll(); drag = { kind: 'newframe', f, ox: w.x, oy: w.y, redo0 }; }
+  else if (e.target.classList.contains('hd') && e.target.closest('#gbox')) {
+    // skalowanie kilku zaznaczonych naraz: wszystko (z zawartością ramek i kreskami) rośnie od lewego górnego rogu
+    const ms = movingSet(), list = [...ms].map(byId).filter(Boolean), b0 = bbox(list.filter(i => i.type !== 'drawing'));
+    drag = { kind: 'gresize', moved: false, b0, cur: b0, gx: b0.x + b0.w - w.x, gy: b0.y + b0.h - w.y, ms, start: list.map(o => [o, o.x, o.y, o.w, o.h]) };
+  }
   else if (e.target.classList.contains('hd') && item) {
     drag = { kind: 'resize', moved: false, item, ox: w.x, oy: w.y, w0: item.w, h0: item.h, ratio: item.type === 'image' ? item.w / item.h : 0,
-      kids: kidsOf(item.id).map(c => [c, c.x, c.y, c.w, c.h]) };
+      gx: item.x + item.w - w.x, gy: item.y + item.h - w.y, kids: kidsOf(item.id).map(c => [c, c.x, c.y, c.w, c.h]) };
   } else if (item) {
     if (e.shiftKey || e.metaKey || e.ctrlKey) { sel.has(item.id) ? sel.delete(item.id) : sel.add(item.id); }
     else if (!sel.has(item.id)) sel = new Set([item.id]);
     // ramka przesuwa się razem z tym, co w niej leży
-    const moving = movingSet();
-    drag = { kind: 'move', ox: w.x, oy: w.y, start: [...moving].map(id => { const o = byId(id); return [o, o.x, o.y]; }), moved: false };
+    const moving = movingSet(), start = [...moving].map(id => { const o = byId(id); return [o, o.x, o.y]; });
+    drag = { kind: 'move', ox: w.x, oy: w.y, start, moved: false, moving, box0: bbox(start.map(s => s[0]).filter(o => o.type !== 'drawing')) };
     drawAll();
   } else {
     if (!e.shiftKey) sel.clear();
@@ -624,15 +835,23 @@ main.addEventListener('pointermove', e => {
     drag.live.querySelector('path').setAttribute('d', penPath(drag.pts));
   }
   else if (drag.kind === 'move') {
-    const dx = w.x - drag.ox, dy = w.y - drag.oy;
+    let dx = w.x - drag.ox, dy = w.y - drag.oy;
     if (!drag.moved && Math.hypot(dx, dy) * board.view.z < 3) return;
     if (!drag.moved) { drag.moved = true; snapshot(); }
+    const b = snapMove({ ...drag.box0, x: drag.box0.x + dx, y: drag.box0.y + dy }, drag.moving, e.altKey);   // ⌥ / Alt: bez przyciągania
+    dx = b.x - drag.box0.x; dy = b.y - drag.box0.y;
     for (const [o, x, y] of drag.start) { o.x = Math.round(x + dx); o.y = Math.round(y + dy); drawItem(o); }
+    updateGbox();
+  } else if (drag.kind === 'gresize') {
+    if (!drag.moved) { drag.moved = true; snapshot(); }
+    const b0 = drag.b0, nb = resizeBox(b0, w.x + drag.gx, w.y + drag.gy, drag.ms, true, 24, e.altKey), k = nb.w / b0.w;
+    drag.cur = nb;
+    for (const [o, x, y, ow, oh] of drag.start) { o.x = b0.x + (x - b0.x) * k; o.y = b0.y + (y - b0.y) * k; o.w = ow * k; if (o.type !== 'note') o.h = oh * k; drawItem(o); }
+    updateGbox();
   } else if (drag.kind === 'resize') {
     if (!drag.moved) { drag.moved = true; snapshot(); }   // krok cofania dopiero przy prawdziwej zmianie rozmiaru
-    const it = drag.item; let nw = Math.max(24, drag.w0 + w.x - drag.ox), nh = Math.max(24, drag.h0 + w.y - drag.oy);
-    if (drag.ratio) nh = nw / drag.ratio;
-    it.w = Math.round(nw); if (it.type !== 'note') it.h = Math.round(nh); drawItem(it);
+    const it = drag.item, nb = resizeBox({ x: it.x, y: it.y, w: drag.w0, h: drag.h0 }, w.x + drag.gx, w.y + drag.gy, new Set([it.id, ...drag.kids.map(c => c[0].id)]), !!drag.ratio, 24, e.altKey);
+    it.w = Math.round(nb.w); if (it.type !== 'note') it.h = Math.round(nb.h); drawItem(it);
     const k = it.w / drag.w0; for (const [c, x, y, cw, ch] of drag.kids) { c.x = it.x + (x - it.x) * k; c.y = it.y + (y - it.y) * k; c.w = cw * k; c.h = ch * k; drawItem(c); }
   } else if (drag.kind === 'newframe') {
     const f = drag.f; f.x = Math.min(drag.ox, w.x); f.y = Math.min(drag.oy, w.y); f.w = Math.abs(w.x - drag.ox); f.h = Math.abs(w.y - drag.oy); drawItem(f);
@@ -649,7 +868,7 @@ main.addEventListener('pointermove', e => {
 function endDrag() {
   if (!drag) return;
   const d = drag; drag = null;
-  main.classList.remove('panning'); $('#marq').style.display = 'none';
+  main.classList.remove('panning'); $('#marq').style.display = 'none'; clearGuides(); snapCache = null;
   if (d.kind === 'pan') changedView();
   if (d.kind === 'pen') {
     d.live.remove();
@@ -661,6 +880,10 @@ function endDrag() {
     changed(); frameCounts();
   }
   if (d.kind === 'resize' && d.moved) { changed(); drawItem(d.item); frameCounts(); }
+  if (d.kind === 'gresize' && d.moved) {
+    for (const [o] of d.start) { o.x = Math.round(o.x); o.y = Math.round(o.y); o.w = Math.round(o.w); if (o.type !== 'note') o.h = Math.round(o.h); }
+    changed(); frameCounts();
+  }
   if (d.kind === 'newframe') {
     if (d.f.w < 20 || d.f.h < 20) { board.items = board.items.filter(i => i !== d.f); sel.clear(); undoStack.pop(); redoStack.push(...d.redo0); }   // za mała ramka: jakby jej nie było
     else { d.f.x = Math.round(d.f.x); d.f.y = Math.round(d.f.y); d.f.w = Math.round(d.f.w); d.f.h = Math.round(d.f.h); changed(); setTool('select'); renameFrame(d.f); }
@@ -668,6 +891,9 @@ function endDrag() {
   drawAll();
 }
 main.addEventListener('pointerup', endDrag);
+// fokus pola tekstowego przy krawędzi (nazwa ramki, notatka) potrafi przewinąć płótno mimo overflow:hidden;
+// wtedy współrzędne kursora rozjeżdżają się z elementami — płótno zawsze wraca na zero
+main.addEventListener('scroll', () => { if (main.scrollLeft || main.scrollTop) { main.scrollLeft = 0; main.scrollTop = 0; } });
 main.addEventListener('pointercancel', endDrag);
 main.addEventListener('dblclick', e => {
   if (tool === 'pen') return;   // z mazakiem i gumką dwuklik nic nie dodaje
@@ -715,7 +941,7 @@ main.addEventListener('contextmenu', e => {
     [_t('Wytnij'), () => { const t = cutSel(); try { navigator.clipboard.writeText(t); } catch (e) {} }, MOD + 'X'],
     [_t('Powiel'), duplicateSel, MOD + 'D'],
     '-',
-    [_t('Ułóż'), arrange, 'A'],
+    [_t('Ułóż i wyrównaj…'), () => showArrangeMenu(e.clientX, e.clientY)],
     [_t('Ramka wokół zaznaczonych'), () => frameAround(selItems()), MOD + 'G'],
     [_t('Na wierzch'), () => reorder(1)], [_t('Na spód'), () => reorder(-1)],
     [_t('Pokaż'), () => fit(selItems()), 'Z'],
@@ -870,6 +1096,11 @@ addEventListener('keydown', e => {
   if (mod && k === '-') { e.preventDefault(); zoomAt(0.8); return; }
   if (mod && k === 's') { e.preventDefault(); dirty = true; saveNow(); return; }
   if (mod) return;
+  // wyrównywanie: ⌥ / Alt + A D W S (krawędzie), V H (osie), ⇧ H V (równe odstępy); e.code, bo ⌥ na Macu zmienia znak
+  if (e.altKey && sel.size) {
+    const A = e.shiftKey ? { KeyH: 'dx', KeyV: 'dy' } : { KeyA: 'left', KeyD: 'right', KeyW: 'top', KeyS: 'bottom', KeyV: 'cx', KeyH: 'cy' };
+    if (A[e.code]) { e.preventDefault(); alignSel(A[e.code]); return; }
+  }
   if (k === 'delete' || k === 'backspace') { e.preventDefault(); removeSel(); }
   else if (k === 'escape') { if (isFs() && fsBare !== null && !sel.size && tool === 'select') fullscreenToggle(); sel.clear(); setTool('select'); drawAll(); hideMenu(); }
   else if (k === 'v') setTool('select');
@@ -959,6 +1190,8 @@ function renderKeys() {
     [MOD + 'A', _t('zaznacz wszystko')], [wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'), _t('przybliżanie')],
     [_t('strzałki'), _t('przesuń zaznaczone') + ' (' + SHIFT + ' ×10)'], [isMac ? '⌫' : 'Delete', _t('usuń zaznaczone')],
     [_t('wciśnięte kółko') + ' / ' + (isMac ? '⌥' : 'Alt') + ' + ' + _t('przeciąganie'), _t('przesuwanie płótna')], [FSK, _t('pełny ekran')],
+    [(isMac ? '⌥' : 'Alt') + ' + ' + _t('przeciąganie elementu'), _t('bez przyciągania')], [ALT + 'A  ' + ALT + 'D  ' + ALT + 'W  ' + ALT + 'S', _t('wyrównaj do lewej, prawej, góry, dołu')],
+    [ALT + 'V  ' + ALT + 'H', _t('wyrównaj do osi pionowej / poziomej')], [ALTSH + 'H  ' + ALTSH + 'V', _t('równe odstępy w poziomie / w pionie')],
   ];
   $('#keys').innerHTML = '<div class="kc"><div class="kh"><b>' + _t('Skróty klawiszowe') + '</b><span>' + _t('? otwiera tę ściągę · Esc zamyka') + '</span></div>'
     + row(0, [K('1', _t('100%')), K('0', _t('całość'))])
@@ -1078,7 +1311,7 @@ function initUi() {
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = _t(el.dataset.t);
   $('#sideBtn').innerHTML = IC.side; $('#sideBtn').title = _t('Panel boczny'); $('#sideBtn').onclick = () => toggleSide();
   $('#newBtn').innerHTML = IC.plus; $('#newBtn').title = _t('Nowy blat') + ' (' + MOD + 'N)'; $('#newBtn').onclick = newBoard;
-  $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż zaznaczone') + ' (A)'; $('#arrangeBtn').onclick = arrange;
+  $('#arrangeBtn').innerHTML = IC.arrange; $('#arrangeBtn').title = _t('Ułóż i wyrównaj'); $('#arrangeBtn').onclick = e => { e.stopPropagation(); showArrangeMenu(); };
   $('#topBtn').onclick = () => toggleTop(); $('#pillTop').onclick = e => { e.stopPropagation(); toggleTop(); }; $('#pinMark').innerHTML = IC.pinOn; toggleTop(onTop);
   $('#setBtn').innerHTML = IC.set; $('#setBtn').title = _t('Ustawienia'); $('#setBtn').onclick = e => { e.stopPropagation(); showSettings(); };
   $('#keys').addEventListener('click', e => { if (!e.target.closest('.kc')) toggleKeys(false); });
@@ -1146,6 +1379,7 @@ window.blatTest = {
   move: (dx, dy) => { snapshot(); const ms = movingSet(); for (const o of [...ms].map(byId)) { o.x += dx; o.y += dy; } reparent(ms); drawAll(); changed(); },
   frame: name => { frameAround(selItems()); const f = selItems()[0]; const inp = f && els.get(f.id).querySelector('input'); if (inp) { if (name) inp.value = name; inp.blur(); } return f && f.id; },
   bare: v => { toggleBare(v); return isBare(); },
+  align: how => alignSel(how),
   tool: t => { if (t) setTool(t); return tool; },
   top: v => { toggleTop(v); return onTop; },
   theme: m => { if (m) setThemeMode(m); return themeMode(); },
@@ -1412,6 +1646,64 @@ window.blatTest = {
     { showSettings(); const row = [...$('#menu').querySelectorAll('button')].find(x => x.firstChild.textContent === _t('Ukryj interfejs'));
       ok(row && row.querySelector('kbd') && row.querySelector('kbd').textContent === 'Tab', 'w ustawieniach jest „Ukryj interfejs” ze skrótem Tab');
       if (row) row.click(); ok(isBare(), '„Ukryj interfejs” w ustawieniach chowa interfejs'); toggleBare(false); hideMenu(); }
+    // pole tekstowe przy krawędzi (np. nazwa ramki) nie może przewinąć płótna — inaczej kursor i elementy się rozjeżdżają
+    { main.scrollLeft = 300; main.scrollTop = 200; await new Promise(r => setTimeout(r, 30)); ok(main.scrollLeft === 0 && main.scrollTop === 0, 'płótno nie daje się przewinąć (fokus pola tekstowego)'); }
+    // ===== wyrównywanie, przyciąganie, skalowanie wielu (prośba Michała 27.11, jak w Blacie w przeglądarce i w Miro) =====
+    { const tb = await this.newBoard('Wyrównanie ' + Date.now()), tin = $('header input'); if (tin) tin.blur();   // osobny blat: inne elementy nie wpływają na przyciąganie
+      const ids = await this.addTest(3, 800, 600); let [a, b, c] = ids.map(byId); const rebind = () => { [a, b, c] = ids.map(byId); };   // cofanie podmienia obiekty elementów
+      const put = () => { a.x = 0; a.y = 0; a.w = 400; a.h = 300; b.x = 500; b.y = 60; b.w = 300; b.h = 150; c.x = 900; c.y = -40; c.w = 200; c.h = 300; drawAll(); };
+      put(); sel = new Set(ids);
+      this.align('top'); ok(a.y === -40 && b.y === -40 && c.y === -40, 'wyrównaj do góry');
+      put(); this.align('bottom'); ok(a.y + a.h === 300 && b.y + b.h === 300 && c.y + c.h === 300, 'wyrównaj do dołu');
+      put(); this.align('cy'); const cy = v => v.y + v.h / 2; ok(Math.abs(cy(a) - cy(b)) <= 1 && Math.abs(cy(b) - cy(c)) <= 1, 'wyrównaj do osi poziomej (środki na jednej wysokości)');
+      put(); this.align('left'); ok(a.x === 0 && b.x === 0 && c.x === 0, 'wyrównaj do lewej');
+      put(); this.align('right'); ok(a.x + a.w === 1100 && b.x + b.w === 1100, 'wyrównaj do prawej');
+      put(); this.align('cx'); const cx = v => v.x + v.w / 2; ok(Math.abs(cx(a) - cx(b)) <= 1 && Math.abs(cx(a) - cx(c)) <= 1, 'wyrównaj do osi pionowej');
+      put(); b.x = 420; drawAll(); this.align('dx'); ok(Math.abs((b.x - (a.x + a.w)) - (c.x - (b.x + b.w))) <= 1 && a.x === 0 && c.x + c.w === 1100, 'równe odstępy w poziomie, skrajne zostają');
+      put(); const r0 = [a, b, c].map(v => v.w / v.h); this.align('sameH');
+      ok(a.h === b.h && b.h === c.h && [a, b, c].every((v, i) => Math.abs(v.w / v.h - r0[i]) < .02), 'wspólna wysokość z zachowaniem proporcji');
+      ok(b.x >= a.x + a.w && c.x >= b.x + b.w, 'po wspólnej wysokości obrazy w rzędzie nie nachodzą na siebie');
+      put(); this.align('sameW'); ok(a.w === b.w && b.w === c.w && [a, b, c].every((v, i) => Math.abs(v.w / v.h - r0[i]) < .02), 'wspólna szerokość z zachowaniem proporcji');
+      put(); const u0 = undoStack.length; this.align('top'); ok(undoStack.length === u0 + 1, 'wyrównanie to jeden krok cofania'); this.undo(); rebind(); ok(b.y === 60 && c.y === -40, 'cofnięcie wyrównania');
+      // kreska mazaka jedzie z obrazem, ramka z zawartością wyrównuje się w całości
+      put(); const st = byId(this.stroke([[b.x + 20, b.y + 20], [b.x + 80, b.y + 40]])), sx = st.x - b.x, sy = st.y - b.y;
+      sel = new Set(ids); this.align('top'); ok(Math.abs(st.x - b.x - sx) < 1 && Math.abs(st.y - b.y - sy) < 1, 'kreska mazaka jedzie z wyrównanym obrazem');
+      put(); sel = new Set([c.id]); frameAround([c]); const fr = selItems()[0]; const fin = document.querySelector('.fl input'); if (fin) fin.blur(); const off = c.y - fr.y; sel = new Set([a.id, fr.id]); this.align('top');
+      ok(fr.y === Math.min(0, fr.y) && c.y - fr.y === off, 'ramka wyrównuje się razem z zawartością');
+      sel = new Set([fr.id]); removeSel(); sel = new Set([st.id]); removeSel();
+      // za mało zaznaczonych: przycisk potrząsa się i jest podpowiedź
+      sel = new Set([a.id]); this.align('left'); ok($('#arrangeBtn').classList.contains('nie'), 'wyrównanie jednego elementu: przycisk potrząsa się');
+      sel = new Set([a.id, b.id]); put(); this.align('dx'); ok(b.x === 500 && $('#arrangeBtn').classList.contains('nie'), 'równe odstępy potrzebują trzech elementów');
+      // skróty ⌥/Alt
+      put(); sel = new Set(ids); dispatchEvent(new KeyboardEvent('keydown', { key: isMac ? 'å' : 'a', code: 'KeyA', altKey: true })); ok(a.x === 0 && b.x === 0 && c.x === 0, '⌥A / Alt+A wyrównuje do lewej');
+      put(); dispatchEvent(new KeyboardEvent('keydown', { key: 'H', code: 'KeyH', altKey: true, shiftKey: true })); ok(Math.abs((b.x - (a.x + a.w)) - (c.x - (b.x + b.w))) <= 1, '⌥⇧H / Alt+Shift+H: równe odstępy w poziomie');
+      // przycisk układania otwiera menu z wyrównaniem
+      put(); $('#arrangeBtn').click(); const mt = $('#menu').innerText; ok(mt.includes(_t('Wyrównaj do lewej')) && mt.includes(_t('Wspólna wysokość')) && mt.includes(_t('Równe odstępy w poziomie')) && mt.includes(_t('Ułóż w rzędach')), 'przycisk układania otwiera menu wyrównywania'); hideMenu();
+      // przyciąganie przy przesuwaniu: krawędź do krawędzi, z linią pomocniczą; ⌥/Alt wyłącza
+      const drag = async (el, fx, fy, tx, ty, opt = {}) => { const P = (t, x, y, tg) => tg.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, buttons: t === 'pointerup' ? 0 : 1, clientX: x, clientY: y, pointerId: 1, ...opt }));
+        P('pointerdown', fx, fy, el); P('pointermove', (fx + tx) / 2, (fy + ty) / 2, main); P('pointermove', tx, ty, main); const g = $('#guides') ? $('#guides').childElementCount : 0; P('pointerup', tx, ty, main); return g; };
+      const scr = (x, y) => { const r = main.getBoundingClientRect(), v = board.view; return [r.left + v.x + x * v.z, r.top + v.y + y * v.z]; };
+      put(); sel.clear(); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
+      let [fx, fy] = scr(b.x + 50, b.y + 50), [tx, ty] = scr(b.x + 50, b.y + 50 - 60 + 3 / board.view.z);   // b o 57 w górę → górna krawędź 3 px ekranu pod górą a
+      let g = await drag(els.get(b.id), fx, fy, tx, ty); ok(b.y === a.y, 'przesuwany obraz przyciąga się do krawędzi innego'); ok(g > 0, 'przy przyciąganiu widać linię pomocniczą'); ok(!$('#guides') || !$('#guides').childElementCount, 'po puszczeniu linie znikają');
+      put(); [fx, fy] = scr(b.x + 50, b.y + 50); [tx, ty] = scr(b.x + 50, b.y + 50 - 60 + 3 / board.view.z); await drag(els.get(b.id), fx, fy, tx, ty, { altKey: true }); ok(b.y !== a.y, '⌥ / Alt przy przeciąganiu wyłącza przyciąganie');
+      this.undo(); rebind();
+      // równe odstępy: trzeci obraz przyciąga się do odstępu jak między pierwszymi dwoma
+      put(); b.y = 0; b.h = 300; b.w = 300; c.y = 0; c.x = 900 + 7; drawAll(); fit([a, b, c]); await new Promise(r => setTimeout(r, 30));   // odstęp a–b = 100, b–c = 107
+      [fx, fy] = scr(c.x + 50, c.y + 50); [tx, ty] = scr(c.x + 50 - 5, c.y + 50); await drag(els.get(c.id), fx, fy, tx, ty); ok(c.x - (b.x + b.w) === 100, 'przyciąganie do równego odstępu');
+      // zmiana rozmiaru przyciąga prawą krawędź do krawędzi innego obrazu
+      put(); a.y = 400; drawAll(); sel = new Set([a.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
+      const hd = els.get(a.id).querySelector('.hd'), hr = hd.getBoundingClientRect(); [tx, ty] = scr(b.x + b.w - 4 / board.view.z, a.y + a.h);
+      await drag(hd, hr.left + 4, hr.top + 4, tx, ty); ok(a.x + a.w === b.x + b.w, 'zmiana rozmiaru przyciąga się do krawędzi innego obrazu');
+      // skalowanie wielu: wspólna ramka zaznaczenia z uchwytem, proporcje i odległości skalują się razem
+      put(); sel = new Set([a.id, b.id]); drawAll(); fit([a, b]); await new Promise(r => setTimeout(r, 30));
+      const gb = $('#gbox'), gh = gb && gb.querySelector('.hd'); ok(gb && gb.style.display !== 'none' && gh, 'przy kilku zaznaczonych jest wspólna ramka z uchwytem');
+      if (gh) { const box0 = bbox([a, b]), bx0 = b.x - a.x, r = gh.getBoundingClientRect(); [tx, ty] = scr(box0.x + box0.w * 1.5, box0.y + box0.h * 1.5);
+        await drag(gh, r.left + 4, r.top + 4, tx, ty, { altKey: true }); const k = a.w / 400;
+        ok(Math.abs(k - 1.5) < .02 && Math.abs(b.w / 300 - k) < .02 && Math.abs((b.x - a.x) / bx0 - k) < .02 && a.x === 0 && a.y === 0, 'skalowanie wielu elementów naraz od lewego górnego rogu');
+        this.undo(); rebind(); ok(a.w === 400 && b.w === 300, 'cofnięcie skalowania wielu'); }
+      sel = new Set([a.id]); drawAll(); ok(!$('#gbox') || $('#gbox').style.display === 'none', 'przy jednym zaznaczonym nie ma wspólnej ramki');
+      sel = new Set(ids); removeSel(); await this.open(name); await api.boardTrash(tb); await refreshBoards(); fit(); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();

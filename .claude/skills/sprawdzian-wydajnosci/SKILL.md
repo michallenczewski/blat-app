@@ -26,6 +26,7 @@ Chrome bez okna w kontenerze, renderowanie programowe; liczby służą do porów
 | 2026-11-25 | 25,8 s; po dodaniu animacji „sprężyna” (porządkowanie 300 obrazów: 24 ms, przejazd 47 fps) | 53 | 59 |
 | 2026-11-25 | 22,0 s; po dodaniu mazaka i kolejności warstw (porządkowanie 300 obrazów: 19 ms, przejazd 52 fps) | 54 | 60 |
 | 2026-11-27 | 20,2 s; po audycie: pełne obrazy tylko na ekranie, kolejka zapisów, lista blatów bez czytania z dysku (porządkowanie 500 obrazów: 12 ms) | 55 | 59 |
+| 2026-11-27 | 23,4 s; po przyciąganiu i wyrównywaniu (ruch myszy przy przeciąganiu z przyciąganiem, 500 obrazów na ekranie: mediana 3–4 ms, najwyżej 11 ms; ten sam pomiar przed zmianą: 53 / 59) | 52 | 58 |
 
 ## Zasada
 

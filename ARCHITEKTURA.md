@@ -47,6 +47,16 @@ Każdy element to zwykły `div` w warstwie przesuwanej transformacją (`translat
 
 Cofanie trzyma migawki listy elementów (do 120 kroków). To proste i wystarcza, dopóki tablice mają setki, a nie dziesiątki tysięcy elementów.
 
+## Przyciąganie, skalowanie wielu i wyrównywanie
+
+Przyciąganie jest przeniesione 1:1 z Blatu w przeglądarce (`snapMove`, `spacingSnap`, `resizeBox`, próg 6 px na ekranie): przesuwany element (albo cała przesuwana grupa) przyciąga się krawędziami i środkiem do linii innych elementów widocznych na ekranie oraz do równych odstępów w rzędzie lub kolumnie; zmiana rozmiaru przyciąga prawy dolny róg. Linie pomocnicze rysujemy w warstwie `#guides` w świecie, o grubości 1 px na ekranie. Cele i odstępy liczymy raz na przeciąganie (`snapCache`), bo przy setkach obrazów na ekranie liczenie odstępów (n²) przy każdym ruchu myszy byłoby za wolne. ⌥ / Alt w trakcie przeciągania wyłącza przyciąganie.
+
+Przy kilku zaznaczonych jest wspólna ramka `#gbox` z uchwytem: skaluje wszystko naraz (z zawartością ramek i kreskami mazaka) od lewego górnego rogu, z zachowaniem proporcji.
+
+Wyrównywanie (`alignSel`) działa na jednostkach: ramka razem z zawartością albo pojedynczy obraz lub notatka; kreski jadą za swoim obrazem. Sposoby: do lewej, prawej, góry, dołu, do osi pionowej i poziomej, równe odstępy (skrajne elementy zostają, potrzebne co najmniej trzy), wspólna wysokość i szerokość (mediana zaznaczonych, proporcje obrazów zostają, elementy w rzędzie zachowują odstępy). Każde wyrównanie to jeden krok cofania i płynny przejazd (`glide`).
+
+Płótno (`main`) nie może się przewijać: fokus pola tekstowego przy krawędzi przewijał je mimo `overflow:hidden` i współrzędne kursora rozjeżdżały się z elementami — nasłuch `scroll` zawsze wraca na zero.
+
 ## Przyjmowanie obrazów
 
 - Przeciągnięcie plików z dysku, z Gapy albo z Findera i Eksploratora.
