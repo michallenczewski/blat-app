@@ -17,7 +17,7 @@ Jak w Gapie: Tab dodaje do `body` klasę `bare`, która chowa pasek i listę tab
 
 ## Przypięcie w trybie bez nawigacji
 
-Gdy okno jest przypięte („zawsze na wierzchu”), w trybie bez nawigacji widać samą przypinkę z pastylki — w tym samym miejscu, w którym stoi w pastylce. Po ruchu myszy pastylka (tło, cień, pozostałe przyciski) wyrasta wokół niej, więc pinezka nigdy nie przeskakuje. Sama przypinka nie jest obszarem `no-drag`, więc róg okna dalej da się przeciągać.
+Gdy okno jest przypięte („zawsze na wierzchu”), w trybie bez nawigacji widać przypinkę z pastylki — ten sam przycisk i ten sam rozmiar. Bez ruchu myszy przejeżdża ona do narożnika okna (na Windows z systemowymi przyciskami: tuż obok nich), a po ruchu myszy wraca na swoje miejsce w pastylce, która wyrasta wokół niej. Przesunięcie do narożnika liczy `pinCorner()` (zmienne `--pin-dx`, `--pin-dy` na `#fspill`) przy zmianie trybu, przypięcia, pełnego ekranu, przycisków okna i rozmiaru okna. Sama przypinka nie jest obszarem `no-drag`, więc róg okna dalej da się przeciągać.
 
 ## Własne przyciski okna na Windows
 

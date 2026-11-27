@@ -1221,6 +1221,17 @@ function toggleSide(v) { const on = v == null ? document.body.classList.contains
 // tryb bez nawigacji (jak w Gapie): Tab chowa pasek i listę tablic, zostaje samo płótno
 const isBare = () => document.body.classList.contains('bare');
 const isFs = () => document.documentElement.classList.contains('fs');
+// Przypięte okno w trybie bez nawigacji: bez ruchu myszy przypinka (ten sam przycisk, ten sam rozmiar) przejeżdża
+// do narożnika okna, a po ruchu wraca na swoje miejsce w pastylce. Przesunięcie liczymy z położenia w pastylce.
+function pinCorner() {
+  const pill = $('#fspill'), pt = $('#pillTop'); if (!pill || !pt) return;
+  const de = document.documentElement, sys = de.classList.contains('frame-win') && !de.classList.contains('own-btns') && !de.classList.contains('fs');
+  const R = sys ? 152 : 8, T = sys ? 2 : 8;   // na Windows z systemowymi przyciskami róg zajmują one — przypinka staje tuż obok
+  const pr = pill.getBoundingClientRect(), x = pr.left + pt.offsetLeft, y = pr.top + pt.offsetTop;
+  pill.style.setProperty('--pin-dx', Math.round(innerWidth - R - pt.offsetWidth - x) + 'px');
+  pill.style.setProperty('--pin-dy', Math.round(T - y) + 'px');
+}
+addEventListener('resize', () => pinCorner());
 function toggleBare(v) {
   const r0 = main.getBoundingClientRect();
   document.body.classList.toggle('bare', v == null ? !isBare() : !!v);
@@ -1228,7 +1239,7 @@ function toggleBare(v) {
   const r1 = main.getBoundingClientRect();
   if (board) { board.view.x += r0.left - r1.left; board.view.y += r0.top - r1.top; applyView(); }
   if (api.setBare) api.setBare(isBare());
-  syncButtons(); applyTheme(); pillTips(); toolInd();
+  syncButtons(); applyTheme(); pillTips(); toolInd(); pinCorner();
   if (v == null) tip(isBare() ? _t('Tab pokazuje interfejs') : _t('Interfejs widoczny'));
 }
 let fsBare = null;
@@ -1241,7 +1252,7 @@ function onFullscreen(v) {
   document.documentElement.classList.toggle('fs', v);
   if (v && fsBare === null) { fsBare = isBare(); if (!fsBare) toggleBare(true); }
   else if (!v && fsBare !== null) { if (!fsBare) toggleBare(false); fsBare = null; }
-  syncButtons(); applyTheme(); pillTips(); toolInd();
+  syncButtons(); applyTheme(); pillTips(); toolInd(); pinCorner();
 }
 // przyciski okna na Macu: ukryte w trybie bez nawigacji (poza pełnym ekranem), dopóki mysz stoi
 let btnShown = true;
@@ -1255,9 +1266,9 @@ function winBtnsHtml() {
 function applyOwnButtons(v) {
   document.documentElement.classList.toggle('own-btns', !!v);
   for (const id of ['winBtns', 'pillWin']) { const o = document.getElementById(id); if (o) o.remove(); }
-  if (!v) return;
+  if (!v) { pinCorner(); return; }
   const h = document.createElement('div'); h.id = 'winBtns'; h.className = 'wbs'; h.innerHTML = '<span class="sep"></span>' + winBtnsHtml(); $('header').appendChild(h);
-  const p = document.createElement('span'); p.id = 'pillWin'; p.className = 'wbs'; p.innerHTML = '<span class="sep"></span>' + winBtnsHtml(); $('#fspill').appendChild(p);
+  const p = document.createElement('span'); p.id = 'pillWin'; p.className = 'wbs'; p.innerHTML = '<span class="sep"></span>' + winBtnsHtml(); $('#fspill').appendChild(p); pinCorner();
   for (const el of document.querySelectorAll('.wbs .wb')) el.onclick = e => { e.stopPropagation(); api.winCtl(el.dataset.w); };
 }
 async function toggleOwnButtons() {
@@ -1392,7 +1403,7 @@ addEventListener('pointerdown', hintHide, true); addEventListener('wheel', hintH
 let onTop = false;
 // przypięcie na wierzchu: pomarańczowy przycisk z pełną pinezką; w trybie bez nawigacji mała pinezka w rogu
 function toggleTop(v) {
-  onTop = v == null ? !onTop : v;
+  onTop = v == null ? !onTop : v; pinCorner();
   const anim = onTop !== $('#topBtn').classList.contains('pinned');
   for (const b of [$('#topBtn'), $('#pillTop')]) { if (!b) continue; b.classList.toggle('pinned', onTop);
     if (anim) { b.classList.remove('pinIn', 'pinOut'); void b.offsetWidth; b.classList.add(onTop ? 'pinIn' : 'pinOut'); } b.innerHTML = onTop ? IC.pinOn : IC.pin; b.title = (onTop ? _t('Przypięty na wierzchu') : _t('Zawsze na wierzchu')) + ' (P)'; }
@@ -1538,10 +1549,12 @@ window.blatTest = {
       toggleTop(true); const on = bg(); toggleTop(false); const off = bg();
       ok(on === 'rgb(255, 107, 26)' && off !== on, 'przypięty przycisk pinezki jest pomarańczowy, odpięty nie');
       // przypięcie w trybie bez nawigacji: widać samą przypinkę z pastylki, a po ruchu myszy pastylka wyrasta wokół niej — pinezka nie przeskakuje (zgłoszenie Michała 27.11)
-      toggleBare(true); document.body.classList.add('moving'); toggleTop(true); await new Promise(r => setTimeout(r, 300)); const pt = $('#pillTop'), r1 = pt.getBoundingClientRect();
-      document.body.classList.remove('moving'); await new Promise(r => setTimeout(r, 300)); const r2 = pt.getBoundingClientRect(), op = el => +getComputedStyle(el).opacity;
+      toggleBare(true); document.body.classList.add('moving'); toggleTop(true); await new Promise(r => setTimeout(r, 500)); const pt = $('#pillTop'), r1 = pt.getBoundingClientRect();
+      document.body.classList.remove('moving'); await new Promise(r => setTimeout(r, 500)); const r2 = pt.getBoundingClientRect(), op = el => +getComputedStyle(el).opacity;
       ok(op($('#fspill')) > .9 && op(pt) > .9 && op($('#pillUi')) < .1, 'w trybie bez nawigacji przypięcie widać w rogu (sama przypinka)');
-      ok(Math.abs(r1.left - r2.left) < 1 && Math.abs(r1.top - r2.top) < 1, 'przypinka stoi w tym samym miejscu z pastylką i bez niej');
+      ok(Math.abs(r1.width - r2.width) < .5 && Math.abs(r1.height - r2.height) < .5, 'przypinka ma ten sam rozmiar w pastylce i w rogu');
+      const sysR = document.documentElement.classList.contains('frame-win') && !document.documentElement.classList.contains('own-btns') ? 150 : 0;   // na Windows róg zajmują systemowe przyciski
+      ok(innerWidth - sysR - r2.right <= 12 && r2.top <= 12 && r2.left > r1.left, 'bez ruchu myszy przypinka przejeżdża do narożnika');
       ok(getComputedStyle($('#fspill')).getPropertyValue('-webkit-app-region') !== 'no-drag', 'sama przypinka nie blokuje przeciągania okna');
       toggleTop(false); await new Promise(r => setTimeout(r, 300)); ok(op($('#fspill')) < .1, 'po odpięciu przypinka w rogu znika'); toggleBare(false); toggleTop(was); }
     // animacje „sprężyna” i reakcja porządkowania (prośba Michała 25.11.2026)
