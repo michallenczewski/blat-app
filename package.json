@@ -1,7 +1,7 @@
 {
   "name": "blat-app",
   "productName": "Blat",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Blat — lekki blat na referencje w języku wizualnym Gapy",
   "author": "Michał Lenczewski",
   "license": "MIT",
