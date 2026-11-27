@@ -894,10 +894,10 @@ addEventListener('blur', () => { spaceDown = false; main.classList.remove('space
 
 /* ---------- menu ---------- */
 function showMenu(x, y, rows) {
-  const m = $('#menu'); m.innerHTML = '';
+  const m = $('#menu'); m.innerHTML = ''; delete m.dataset.set;
   for (const r of rows) {
     if (r === '-') { m.appendChild(document.createElement('hr')); continue; }
-    const b = document.createElement('button'); if (r[3] === 'warn' || r[2] === 'warn') b.className = 'warn'; if (r[3] === 'info') { b.className = 'info'; b.disabled = true; }
+    const b = document.createElement('button'); if (r[3] === 'warn' || r[2] === 'warn') b.className = 'warn'; if (r[3] === 'info') { b.className = 'info'; b.disabled = true; } if (r[3] === 'acc') b.className = 'acc';
     b.innerHTML = '<span></span>' + (r[2] && r[2] !== 'warn' ? '<kbd>' + r[2] + '</kbd>' : '');
     b.firstChild.textContent = r[0];
     b.onclick = () => { hideMenu(); r[1](); };
@@ -972,6 +972,15 @@ function toggleKeys(v) { const o = $('#keys'); v = v == null ? !keysOpen() : v; 
 function wheelTexts() { $('#zoomHint').textContent = wheelMode === 'zoom' ? _t('kółko') : MOD + _t('kółko'); if (keysOpen()) renderKeys(); }
 // ustawienia: motyw, skróty, kółko myszy, aktywowanie po najechaniu (Mac), wersja i aktualizacje
 let updState = null;
+// Aktualizacja nie zajmuje miejsca w oknie: gdy jest nowa wersja albo trwa instalacja, przycisk ustawień ma kropkę,
+// a stan i instalacja są na dole menu ustawień (WYTYCZNE_INTERAKCJE, pkt 8).
+function updShow(s) {
+  updState = s;
+  const on = !!(s && /^(available|downloading|ready|opened)$/.test(s.state)), b = $('#setBtn');
+  b.classList.toggle('upd', on);
+  b.title = _t('Ustawienia') + (on && s.version ? ' · ' + _t('Nowa wersja') + ' ' + s.version : '');
+  if (on && $('#menu').style.display === 'block' && $('#menu').dataset.set) showSettings();   // otwarte menu pokazuje bieżący postęp
+}
 function showSettings() {
   const r = $('#setBtn').getBoundingClientRect(), u = updState || {};
   const tm = themeMode();
@@ -988,16 +997,21 @@ function showSettings() {
     ...(isMac || api.web ? [[_t('Aktywuj Blat po najechaniu kursorem'), () => setHoverFocus(!hoverFocus), hoverFocus ? '✓' : ''], '-'] : []),
     ['Blat ' + (u.current || ''), () => {}, '', 'info']
   ];
-  if (u.state === 'available' || u.state === 'downloading') rows.push([_t('Zainstaluj wersję') + ' ' + u.version, () => api.updateInstall && api.updateInstall()]);
+  const inst = () => api.updateInstall && api.updateInstall();
+  if (u.state === 'available') rows.push([_t('Zainstaluj wersję') + ' ' + u.version, inst, '', 'acc']);
+  else if (u.state === 'downloading') rows.push([_t('Pobieram wersję') + ' ' + u.version + (u.size ? ' — ' + Math.round(u.got / u.size * 100) + '%' : ''), () => {}, '', 'info']);
+  else if (u.state === 'ready') rows.push([_t('Instaluję…'), () => {}, '', 'info']);
+  else if (u.state === 'opened') rows.push([_t('Przeciągnij Blat do Programów'), inst, '', 'acc']);   // ponownie otwiera pobrany obraz dysku
   else rows.push([_t('Sprawdź aktualizacje'), checkUpdates]);
   showMenu(r.left, r.bottom + 6, rows);
-  const m = $('#menu'); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px'; m.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 8)) + 'px';
+  const m = $('#menu'); m.dataset.set = '1'; m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px'; m.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 8)) + 'px';
 }
 async function checkUpdates() {
   if (!api.updateCheck) return;
   tip(_t('Sprawdzam aktualizacje…'));
   const s = await api.updateCheck(); updState = { ...(updState || {}), ...s };
-  if (s.state === 'available') tip(_t('Dostępna wersja') + ' ' + s.version + ' — ' + _t('zainstalujesz ją w ustawieniach albo w bocznym pasku'));
+  updShow(updState);
+  if (s.state === 'available') tip(_t('Dostępna wersja') + ' ' + s.version + ' — ' + _t('zainstalujesz ją w ustawieniach'));
   else if (s.state === 'none') tip(_t('Masz najnowszą wersję') + ' (' + (s.current || '') + ')');
   else tip(_t('Nie udało się sprawdzić aktualizacji'));
 }
@@ -1033,14 +1047,14 @@ function hintShow(el) {
 }
 function hintHide() { clearTimeout(hintT); if (hintEl) hintLast = Date.now(); hintEl = null; $('#hint').classList.remove('on'); }
 document.addEventListener('pointerover', e => {
-  const el = e.target.closest && e.target.closest('.ib, #upd'); if (!el || el === hintEl) return;
+  const el = e.target.closest && e.target.closest('.ib'); if (!el || el === hintEl) return;
   if (el.title) { el.dataset.tip = el.title; el.removeAttribute('title'); }   // systemowy dymek nie dubluje naszego
   hintHide(); hintEl = el;
   hintT = setTimeout(() => { if (hintEl === el) hintShow(el); }, Date.now() - hintLast < 400 ? 0 : 1500);
 });
-document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.ib, #upd'); if (el && el === hintEl && !el.contains(e.relatedTarget)) hintHide(); });
+document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.ib'); if (el && el === hintEl && !el.contains(e.relatedTarget)) hintHide(); });
 // opis zmieniony przez program (przypinka, motyw, pełny ekran…) też trafia do data-tip, bez systemowego dymka
-new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (!el.title || !el.matches('.ib, #upd')) continue; el.dataset.tip = el.title; el.removeAttribute('title'); if (el === hintEl && $('#hint').classList.contains('on')) hintShow(el); } })
+new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (!el.title || !el.matches('.ib')) continue; el.dataset.tip = el.title; el.removeAttribute('title'); if (el === hintEl && $('#hint').classList.contains('on')) hintShow(el); } })
   .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['title'] });
 addEventListener('pointerdown', hintHide, true); addEventListener('wheel', hintHide, { passive: true });
 let onTop = false;
@@ -1094,15 +1108,13 @@ function initUi() {
     return !dirty;
   };
   if (api.onFlush) api.onFlush(flush); else addEventListener('beforeunload', () => { if (dirty || viewT) api.boardSave(board.name, board); });
-  // aktualizacje: dyskretna informacja w panelu bocznym
+  // aktualizacje: kropka na przycisku ustawień, reszta w menu ustawień (opened: na Macu pobrany obraz dysku jest otwarty,
+  // przeciągnięcie do Programów robi użytkownik)
   if (api.onUpdateStatus) {
-    // opened: na Macu pobrany obraz dysku jest otwarty, resztę (przeciągnięcie do Programów) robi użytkownik
-    const show = s => { const b = $('#upd'); b.hidden = !(s && /^(available|downloading|ready|opened)$/.test(s.state));
-      if (!b.hidden) b.textContent = s.state === 'available' ? _t('Nowa wersja') + ' ' + s.version : s.state === 'downloading' ? _t('Pobieram') + ' ' + (s.size ? Math.round(s.got / s.size * 100) + '%' : '') : s.state === 'opened' ? _t('Przeciągnij Blat do Programów') : _t('Instaluję…'); };
+    const show = updShow;
     // błąd pokazujemy tylko po próbie pobrania (nie przy cichym sprawdzaniu w tle); kod z procesu głównego tłumaczymy tutaj
     const UPDERR = { network: 'brak połączenia', incomplete: 'pobrany plik jest niepełny', checksum: 'pobrany plik jest uszkodzony', disk: 'nie udało się zapisać pliku', save: 'najpierw trzeba zapisać zmiany w blacie' };
     api.onUpdateStatus(s => { const err = s && s.error && updState && /^(downloading|ready)$/.test(updState.state); updState = s; show(s); if (err) tip(_t('Nie udało się pobrać aktualizacji') + ': ' + _t(UPDERR[s.error] || UPDERR.network)); }); api.updateGet().then(s => { updState = s; show(s); });
-    $('#upd').onclick = () => api.updateInstall();
   }
 }
 
@@ -1388,6 +1400,12 @@ window.blatTest = {
       ok(this.tool('pen') === 'pen' && this.tool('select') === 'select', 'wybór narzędzia');
       const im = byId((await this.addTest(1, 800, 400))[0]), w0 = im.w; this.resize(im.id, w0 * 2); ok(im.w === w0 * 2 && Math.abs(im.w / im.h - 2) < .02, 'zmiana rozmiaru obrazu z zachowaniem proporcji'); this.undo(); ok(byId(im.id).w === w0, 'cofnięcie zmiany rozmiaru');
       await this.trash(); ok(!(await api.boardsList()).boards.some(x => x.name === n2), 'przeniesienie blatu do kosza'); await this.open(name); }
+    // aktualizacja nie siedzi w bocznym pasku: kropka na przycisku ustawień, stan i instalacja w menu ustawień (zgłoszenie Michała 27.11)
+    { const u0 = updState; updShow({ state: 'ready', version: '9.9.9', current: '0.2.6' });
+      ok(!$('aside #upd') && !document.querySelector('aside button:not(.ib)'), 'w bocznym pasku nie ma informacji o aktualizacji');
+      ok($('#setBtn').classList.contains('upd'), 'nowa wersja: kropka na przycisku ustawień');
+      showSettings(); ok($('#menu').innerText.includes(_t('Instaluję…')), 'stan aktualizacji w menu ustawień'); hideMenu();
+      updShow({ state: 'none', current: '0.2.6' }); ok(!$('#setBtn').classList.contains('upd'), 'bez nowej wersji nie ma kropki'); updState = u0; updShow(u0); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();

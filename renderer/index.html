@@ -67,7 +67,10 @@ aside{grid-row:2;overflow:hidden;padding:6px 10px 12px 12px;display:flex;flex-di
 .foot{margin-top:auto;display:flex;align-items:center;gap:4px;padding:8px 0 0 4px;color:var(--muted);font-size:11px}
 .foot .where{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .foot .where:hover{color:var(--text)}
-#upd{font-size:11px;color:var(--text2);padding:2px 7px;border-radius:6px;background:var(--hover);margin:0 0 6px 4px;align-self:flex-start}
+/* nowa wersja: mała kropka w kolorze akcentu na przycisku ustawień; stan i instalacja są w menu ustawień */
+#setBtn.upd::after{content:"";position:absolute;top:5px;right:6px;width:5px;height:5px;border-radius:50%;background:#FF6B1A;box-shadow:0 0 0 1.5px var(--bg)}
+#setBtn{position:relative}
+#menu button.acc span{color:#E85F12}
 main{grid-row:2;position:relative;overflow:hidden;border-top-left-radius:12px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--line);outline:none}
 .noside main{border-top-left-radius:0}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
@@ -208,7 +211,6 @@ body.bare.ontop.moving #pinMark{display:none}
 <aside>
   <div class="sh"><span data-t="Blaty"></span><button class="ib" id="newBtn"></button></div>
   <ul class="nav" id="boards"></ul>
-  <button id="upd" hidden></button>
   <div class="foot"><span class="where" id="where"></span></div>
 </aside>
 <main id="main" tabindex="0">

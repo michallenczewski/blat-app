@@ -192,7 +192,15 @@ We wszystkich programach z rodziny ustawienia są w **tym samym miejscu i pod t�
   2. **Skróty klawiszowe** (skrót `?`). Osobnego przycisku ściągi nie ma; klawisz `?` działa zawsze.
   3. Opcje danego programu (np. w Blacie: kółko myszy, aktywowanie po najechaniu).
   4. Na dole, przygaszony, **numer wersji** („Blat 0.2.5”), a pod nim **Sprawdź aktualizacje** albo
-     **Zainstaluj wersję X**, gdy jest nowsza.
+     **Zainstaluj wersję X** (w kolorze akcentu), gdy jest nowsza. W trakcie w tym samym miejscu:
+     „Pobieram wersję X — 40%”, „Instaluję…”, na Macu „Przeciągnij [program] do Programów”.
+- **Aktualizacja nie zajmuje miejsca w oknie**: żadnych plakietek w bocznym pasku ani w pasku stanu.
+  Gdy jest nowa wersja albo trwa instalacja, przycisk ustawień ma tylko małą kropkę w kolorze akcentu
+  (5 px, prawy górny róg ikony, z obwódką w kolorze tła), a podpowiedź mówi „Ustawienia · Nowa wersja X”:
+  ```css
+  #setBtn{position:relative}
+  #setBtn.upd::after{content:"";position:absolute;top:5px;right:6px;width:5px;height:5px;border-radius:50%;background:#FF6B1A;box-shadow:0 0 0 1.5px var(--bg)}
+  ```
 - Dół bocznego paska (jeśli program go ma) jest tylko na treść, np. ścieżkę do folderu.
 - W bardzo wąskim oknie przycisk ustawień zostaje widoczny do końca; wcześniej chowają się nazwa
   dokumentu i przyciski z własnym skrótem klawiszowym.
@@ -211,4 +219,5 @@ We wszystkich programach z rodziny ustawienia są w **tym samym miejscu i pod t�
 - Wskaźnik wybranego narzędzia wyraźnie widoczny w obu motywach (różnica jasności z kapsułą co najmniej ~12/255).
 - Podpowiedzi: każda ma nazwę i skrót zgodny z systemem; nie wraca systemowy dymek.
 - Przycisk ustawień jest ostatni w górnym pasku, menu ma motyw, skróty, wersję i aktualizacje w opisanej kolejności.
+- Informacja o aktualizacji jest tylko kropką na przycisku ustawień i wierszem w ich menu, nigdzie indziej.
 - Płynność bez zmian (animujemy tylko `transform` i `opacity`, poza krótkimi przejściami koloru).
