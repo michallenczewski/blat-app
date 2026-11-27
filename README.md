@@ -2,7 +2,7 @@
 
 Lekki blat na referencje i szkice koncepcji, na Windows i Maca. Siostra [Gapy](https://github.com/michallenczewski/gapa).
 
-Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopisz notatkę, zbierz grupę w ramkę i ułóż ją jednym klawiszem. Przesuwane elementy przyciągają się do krawędzi, środków i równych odstępów innych (jak w Blacie w przeglądarce i w Miro), kilka zaznaczonych skaluje się razem za róg wspólnej ramki, a przycisk układania wyrównuje je, daje wspólną wysokość albo równe odstępy. Blaty zapisują się same w `Dokumenty/Blat`.
+Przeciągnij obrazy z dysku, z przeglądarki albo z Gapy, wklej ze schowka, dopisz notatkę, zbierz grupę w ramkę i ułóż ją jednym klawiszem. Przesuwane elementy przyciągają się do krawędzi, środków i równych odstępów innych (jak w Blacie w przeglądarce i w Miro), kilka zaznaczonych skaluje się razem za róg wspólnej ramki, a przycisk układania wyrównuje je, daje wspólną wysokość albo równe odstępy. Skopiowany obraz (⌘C / Ctrl+C) wkleisz też w Photoshopie, Chrome czy Wordzie — do innych programów trafia w pełnej rozdzielczości (przy kilku zaznaczonych: pierwszy zaznaczony). Blaty zapisują się same w `Dokumenty/Blat`.
 
 ## Skróty
 

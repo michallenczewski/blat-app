@@ -1,7 +1,7 @@
 // Blat — proces główny: okno, tablice na dysku, przyjmowanie plików, aktualizacje.
 // Tablica to folder „Nazwa.blat” w Dokumenty/Blat: board.json (układ) + img/ (obrazy, raz zapisane).
 // Zapis układu jest lekki (sam JSON), więc może być automatyczny i częsty. Szczegóły w ARCHITEKTURA.md.
-const { app, BrowserWindow, ipcMain, shell, protocol, net, nativeTheme, Menu, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, protocol, net, nativeTheme, Menu, screen, clipboard, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
@@ -164,6 +164,17 @@ ipcMain.handle('images-prune', async (e, name, keep) => {
   let n = 0;
   try { for (const f of await fsp.readdir(dir)) if (!k.has(f)) { await fsp.unlink(path.join(dir, f)).catch(() => {}); n++; } } catch (err) {}
   return n;
+});
+// Kopiowanie do innych programów (Photoshop, Chrome, Word): do schowka systemu trafia obraz w pełnej rozdzielczości
+// i tekst-znacznik, po którym Blat rozpoznaje własną kopię. JPEG i PNG czytamy z pliku; inne formaty (WebP, GIF)
+// okno dekoduje samo i przysyła jako PNG, bo Windows ich nie odczyta.
+ipcMain.handle('clip-write', async (e, text, img) => {
+  let image = null;
+  if (img && img.png) image = nativeImage.createFromBuffer(Buffer.from(img.png));
+  else if (img && img.board && img.file) image = nativeImage.createFromPath(path.join(boardPath(img.board), 'img', imgName(img.file)));
+  if (!image || image.isEmpty()) return false;
+  clipboard.write({ text: String(text || ''), image });
+  return true;
 });
 // obraz przeciągnięty z przeglądarki internetowej: okno nie pobierze go samo (CORS), więc pobiera proces główny
 ipcMain.handle('url-fetch', async (e, url) => {

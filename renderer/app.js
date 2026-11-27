@@ -962,8 +962,9 @@ main.addEventListener('contextmenu', e => {
   if (it && !sel.has(it.id)) { sel = new Set([it.id]); drawAll(); }
   const p = toWorld(e.clientX, e.clientY);
   showMenu(e.clientX, e.clientY, sel.size ? [
-    [_t('Kopiuj'), () => { const t = copySel(); try { navigator.clipboard.writeText(t); } catch (e) {} }, MOD + 'C'],
-    [_t('Wytnij'), () => { const t = cutSel(); try { navigator.clipboard.writeText(t); } catch (e) {} }, MOD + 'X'],
+    // schowek zapisuje jeden pisarz: z obrazem proces główny (tekst razem z nim), bez obrazu samo okno
+    [_t('Kopiuj'), () => { const t = copySel(); clipToSystem(t).then(done => { if (!done) navigator.clipboard.writeText(t).catch(() => {}); }); }, MOD + 'C'],
+    [_t('Wytnij'), () => { const p = clipToSystem(copySel()), t = cutSel(); p.then(done => { if (!done) navigator.clipboard.writeText(t).catch(() => {}); }); }, MOD + 'X'],
     [_t('Powiel'), duplicateSel, MOD + 'D'],
     '-',
     [_t('Ułóż i wyrównaj…'), () => showArrangeMenu(e.clientX, e.clientY)],
@@ -1024,7 +1025,8 @@ document.addEventListener('paste', async e => {
   e.preventDefault();
   const p = pastePoint();
   const files = [...(e.clipboardData.files || [])];
-  if (!files.length && isOurClip(e.clipboardData.getData('text/plain'))) { pasteClip(p); return; }
+  // własna kopia Blatu wygrywa także wtedy, gdy w schowku jest też obraz (kopiujemy go dla innych programów)
+  if (isOurClip(e.clipboardData.getData('text/plain'))) { pasteClip(p); return; }
   if (files.length) { addImages(await filesToBlobs(files), p); return; }
   const text = e.clipboardData.getData('text/plain');
   if (text) addNote(p, text);
@@ -1067,12 +1069,30 @@ async function pasteClip(at, offset) {
 const pastePoint = () => lastPointer && document.elementFromPoint(lastPointer.x, lastPointer.y)?.closest('main') ? toWorld(lastPointer.x, lastPointer.y) : centerWorld();
 function cutSel() { const t = copySel(); if (t == null) return null; sel = movingSet(); removeSel(); return t; }   // ramka razem z zawartością
 function duplicateSel() { if (!sel.size) return; const keep = clip; copySel(); pasteClip(null, Math.round(24 / board.view.z)); clip = keep || clip; }
+// Do innych programów (Photoshop, Chrome, Word) trafia obraz w pełnej rozdzielczości. Schowek systemu mieści jeden obraz,
+// więc przy kilku zaznaczonych idzie pierwszy zaznaczony. Tekst-znacznik zostaje, żeby Blat poznał własną kopię.
+// Zwraca true, gdy schowek zapisał proces główny (obraz razem z tekstem).
+async function clipToSystem(text) {
+  if (!api.clipWrite || text == null) return false;
+  const imgs = [...sel].map(byId).filter(o => o && o.type === 'image' && o.img && o.img.full);
+  if (!imgs.length) return false;
+  const it = imgs[0], f = it.img.full, b = board.name;
+  if (imgs.length > 1) tip(_t('Do innych programów trafia jeden obraz — pierwszy zaznaczony'));
+  try {
+    if (/\.(jpe?g|png)$/i.test(f)) return await api.clipWrite(text, { board: b, file: f });
+    const im = new Image(); im.src = api.imageUrl(b, f); await im.decode();
+    const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0);
+    const png = await new Promise(r => c.toBlob(r, 'image/png'));
+    return png ? await api.clipWrite(text, { png: await png.arrayBuffer() }) : false;
+  } catch (err) { errors.push(err.message); return false; }
+}
 document.addEventListener('copy', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) return;
-  e.preventDefault(); e.clipboardData.setData('text/plain', copySel());
+  e.preventDefault(); const t = copySel(); e.clipboardData.setData('text/plain', t); clipToSystem(t);
 });
 document.addEventListener('cut', e => {
   if (e.target.closest && (e.target.closest('input') || e.target.isContentEditable) || !sel.size) return;
+  const t0 = copySel(); clipToSystem(t0);   // obraz do schowka, zanim element zniknie z blatu
   e.preventDefault(); e.clipboardData.setData('text/plain', cutSel());
 });
 async function pasteFromClipboard(p) {
@@ -1772,6 +1792,18 @@ window.blatTest = {
       // obraz zaznaczony razem ze swoją kreską ma uchwyt zmiany rozmiaru
       { put(); const st = byId(this.stroke([[a.x + 20, a.y + 20], [a.x + 60, a.y + 30]])); sel = new Set([a.id, st.id]); drawAll(); ok(!!els.get(a.id).querySelector('.hd'), 'obraz zaznaczony z kreską ma uchwyt zmiany rozmiaru'); sel = new Set([st.id]); removeSel(); }
       sel = new Set(ids); removeSel(); await this.open(name); await api.boardTrash(tb); await refreshBoards(); fit(); }
+    // kopiowanie obrazu do innych programów (Photoshop, Chrome): obraz trafia też do schowka systemu (prośba Michała 27.11)
+    { const [i1, i2] = (await this.addTest(2, 1600, 1000)).map(byId), cp = () => document.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData: new DataTransfer() }));
+      api._clip = null; sel = new Set([i1.id]); cp(); await new Promise(r => setTimeout(r, 300));
+      ok(api._clip && api._clip.file === i1.img.full && api._clip.board === board.name && isOurClip(api._clip.text), 'skopiowany obraz trafia do schowka systemu razem ze znacznikiem Blatu');
+      const f0 = i2.img.full; i2.img.full = i2.img.thumb; api._clip = null; sel = new Set([i2.id]); cp(); await new Promise(r => setTimeout(r, 600));   // .webp: Windows go nie odczyta, więc idzie jako PNG
+      ok(api._clip && api._clip.png && api._clip.png.byteLength > 1000 && !api._clip.file, 'obraz .webp trafia do schowka jako PNG'); i2.img.full = f0;
+      api._clip = null; const nn = byId(this.note(0, -900, 'tylko tekst')); sel = new Set([nn.id]); cp(); await new Promise(r => setTimeout(r, 100)); ok(!api._clip, 'notatka nie wysyła obrazu do schowka');
+      // wklejenie w Blacie kopii z obrazem w schowku: wraca kopia Blatu, nie nowy import obrazu
+      sel = new Set([i1.id, nn.id]); const dt = new DataTransfer(); dt.setData('text/plain', copySel()); dt.items.add(new File([await (await fetch(api.imageUrl(board.name, i1.img.thumb))).blob()], 'image.png', { type: 'image/png' }));
+      const n0 = board.items.length; document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt })); await new Promise(r => setTimeout(r, 400));
+      const added = board.items.slice(n0); ok(added.length === 2 && added.some(i => i.type === 'note') && added.some(i => i.type === 'image' && i.img.full === i1.img.full), 'wklejenie kopii Blatu z obrazem w schowku daje kopię Blatu');
+      sel = new Set([i1.id, i2.id, nn.id, ...added.map(i => i.id)]); removeSel(); }
     this.keys(true); ok(keysOpen() && $('#keys .kc') && $('#keys .kc').getBoundingClientRect().width < innerWidth, 'ściąga skrótów otwiera się i mieści w oknie');
     this.keys(false); ok(!keysOpen(), 'ściąga skrótów się zamyka');
     await api.boardTrash(name); await refreshBoards();

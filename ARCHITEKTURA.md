@@ -47,6 +47,10 @@ Każdy element to zwykły `div` w warstwie przesuwanej transformacją (`translat
 
 Cofanie trzyma migawki listy elementów (do 120 kroków). To proste i wystarcza, dopóki tablice mają setki, a nie dziesiątki tysięcy elementów.
 
+## Kopiowanie do innych programów
+
+⌘C / Ctrl+C (i „Kopiuj” w menu) zapisuje do schowka systemu obraz w pełnej rozdzielczości razem z tekstem-znacznikiem kopii Blatu (`clip-write` w procesie głównym, `clipboard.write`). Schowek mieści jeden obraz, więc przy kilku zaznaczonych idzie pierwszy zaznaczony. JPEG i PNG proces główny czyta z pliku (nazwa przez `imgName`, tylko z folderu blatu); WebP i GIF okno dekoduje i przysyła jako PNG, bo Windows ich nie odczyta. Przy wklejaniu w Blacie znacznik wygrywa z obrazem w schowku, więc wraca kopia Blatu (z notatkami i ramkami), a nie nowy import. Schowek zapisuje zawsze jeden pisarz: z obrazem proces główny, bez obrazu samo okno.
+
 ## Przyciąganie, skalowanie wielu i wyrównywanie
 
 Przyciąganie jest przeniesione 1:1 z Blatu w przeglądarce (`snapMove`, `spacingSnap`, `resizeBox`, próg 6 px na ekranie): przesuwany element (albo cała przesuwana grupa) przyciąga się krawędziami i środkiem do linii innych elementów widocznych na ekranie oraz do równych odstępów w rzędzie lub kolumnie; zmiana rozmiaru przyciąga prawy dolny róg. Linie pomocnicze rysujemy w warstwie `#guides` w świecie, o grubości 1 px na ekranie. Cele i odstępy liczymy raz na przeciąganie (`snapCache`), bo przy setkach obrazów na ekranie liczenie odstępów (n²) przy każdym ruchu myszy byłoby za wolne. ⌥ / Alt w trakcie przeciągania wyłącza przyciąganie.
