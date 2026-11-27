@@ -24,7 +24,9 @@ if (!window.api) (() => {
     async imagesPrune(n, keep) { const k = new Set(keep); let c = 0; for (const key of [...files.keys()]) if (key.startsWith(n + '/') && !k.has(key.slice(n.length + 1))) { files.delete(key); c++; } return c; },
     async updateGet() { return { state: 'none', current: '0.0.0-web' }; }, async updateCheck() { return { state: 'none', current: '0.0.0-web' }; }, async updateInstall() { return false; }, onUpdateStatus() {},
     // schowek systemu: w przeglądarce testowej tylko zapamiętujemy, co by tam trafiło (sprawdziany)
-    _clip: null, async clipWrite(text, img) { this._clip = { text, ...img }; return true; },
+    // _clipOurs: wynik porównania odcisku obrazu w schowku (null = obraz zapisany przez nas, jeśli jakiś był)
+    _clip: null, _clipOurs: null, async clipWrite(img) { this._clip = { ...img }; return true; },
+    async clipOurs() { return this._clipOurs == null ? !!this._clip : this._clipOurs; },
     async imageCopy(a, b, f) { const u = files.get(a + '/' + f) || files.get(b + '/' + f); if (u) files.set(b + '/' + f, u); return !!u; },
     imageUrl: (n, f) => files.get(n + '/' + f) || '',
     setOnTop() {}, setSide() {}, uiState: async () => ({ side: true, onTop: false }),

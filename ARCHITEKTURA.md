@@ -49,7 +49,11 @@ Cofanie trzyma migawki listy elementów (do 120 kroków). To proste i wystarcza,
 
 ## Kopiowanie do innych programów
 
-⌘C / Ctrl+C (i „Kopiuj” w menu) zapisuje do schowka systemu obraz w pełnej rozdzielczości razem z tekstem-znacznikiem kopii Blatu (`clip-write` w procesie głównym, `clipboard.write`). Schowek mieści jeden obraz, więc przy kilku zaznaczonych idzie pierwszy zaznaczony. JPEG i PNG proces główny czyta z pliku (nazwa przez `imgName`, tylko z folderu blatu); WebP i GIF okno dekoduje i przysyła jako PNG, bo Windows ich nie odczyta. Przy wklejaniu w Blacie znacznik wygrywa z obrazem w schowku, więc wraca kopia Blatu (z notatkami i ramkami), a nie nowy import. Schowek zapisuje zawsze jeden pisarz: z obrazem proces główny, bez obrazu samo okno.
+⌘C / ⌘X (i „Kopiuj” / „Wytnij” w menu) zapisuje do schowka tekst-znacznik kopii Blatu, jak dotąd. Gdy w kopii jest obraz, Blat zapamiętuje go (`clipMark`) i zapisuje do schowka systemu **sam obraz, bez tekstu**, dopiero gdy okno traci fokus, czyli przy przejściu do innego programu (`clipFlush` na `blur`, a także przed zamknięciem okna). Dzięki temu zwykłe ⌘C / ⌘V wewnątrz Blatu nic nie kosztuje, a Word, Notatki czy pola tekstowe w Chrome nie wklejają znacznika zamiast obrazu. Każda kopia, także zwykły tekst w notatce, podbija `clipGen` i unieważnia starszy, niezapisany obraz.
+
+Schowek mieści jeden obraz: idzie pierwszy obraz kopii (z zaznaczenia albo z ramki), sam plik, bez kresek mazaka. JPEG i PNG proces główny czyta z pliku (`clip-write`, nazwa przez `imgName`, tylko z folderu blatu); WebP i GIF okno dekoduje i przysyła jako PNG (do 150 MB, do 8192×8192 px), bo Windows ich nie odczyta.
+
+Po zapisie proces główny pamięta odcisk obrazu w schowku (wymiary i próbka pikseli). Przy wklejaniu w Blacie, gdy w schowku nie ma tekstu, a jest obraz, `clip-ours` porównuje odciski: zgodny znaczy własną kopię (wraca kopia Blatu z notatkami i ramkami), niezgodny — obraz z innego programu (zwykły import).
 
 ## Przyciąganie, skalowanie wielu i wyrównywanie
 

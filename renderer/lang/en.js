@@ -58,5 +58,4 @@ window.BLAT_EN = {
   'przeciąganie elementu': 'dragging an item', 'bez przyciągania': 'without snapping',
   'wyrównaj do lewej, prawej, góry, dołu': 'align left, right, top, bottom', 'wyrównaj do osi pionowej / poziomej': 'align to vertical / horizontal axis',
   'równe odstępy w poziomie / w pionie': 'equal horizontal / vertical spacing',
-  'Do innych programów trafia jeden obraz — pierwszy zaznaczony': 'Other apps get one image — the first one selected',
 };

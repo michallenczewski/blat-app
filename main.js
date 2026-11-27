@@ -168,14 +168,28 @@ ipcMain.handle('images-prune', async (e, name, keep) => {
 // Kopiowanie do innych programów (Photoshop, Chrome, Word): do schowka systemu trafia obraz w pełnej rozdzielczości
 // i tekst-znacznik, po którym Blat rozpoznaje własną kopię. JPEG i PNG czytamy z pliku; inne formaty (WebP, GIF)
 // okno dekoduje samo i przysyła jako PNG, bo Windows ich nie odczyta.
-ipcMain.handle('clip-write', async (e, text, img) => {
+// Do schowka trafia sam obraz (bez tekstu, żeby Word czy Notatki nie wkleiły znacznika). Własną kopię Blat poznaje
+// po odcisku: wymiary i próbka pikseli obrazu, który tu zapisaliśmy, porównane z obrazem w schowku przy wklejaniu.
+let clipFp = null;
+function imageFp(image) {
+  if (!image || image.isEmpty()) return null;
+  const { width, height } = image.getSize(), bm = image.toBitmap(), n = bm.length >> 2, parts = [width, height];
+  for (let i = 0; i < 97; i++) { const k = Math.floor(i * (n - 1) / 96) * 4; parts.push(bm.readUInt32LE(k)); }
+  return parts.join(',');
+}
+ipcMain.handle('clip-write', async (e, img) => {
   let image = null;
-  if (img && img.png) image = nativeImage.createFromBuffer(Buffer.from(img.png));
-  else if (img && img.board && img.file) image = nativeImage.createFromPath(path.join(boardPath(img.board), 'img', imgName(img.file)));
+  if (img && img.png) {
+    if (!(img.png instanceof ArrayBuffer) || img.png.byteLength > 150 * 1048576) return false;
+    image = nativeImage.createFromBuffer(Buffer.from(img.png));
+  } else if (img && img.board && img.file) image = nativeImage.createFromPath(path.join(boardPath(img.board), 'img', imgName(img.file)));
   if (!image || image.isEmpty()) return false;
-  clipboard.write({ text: String(text || ''), image });
+  const s = image.getSize(); if (s.width * s.height > 8192 * 8192) return false;
+  clipboard.writeImage(image);
+  clipFp = imageFp(clipboard.readImage()) || imageFp(image);   // odcisk tego, co faktycznie jest w schowku
   return true;
 });
+ipcMain.handle('clip-ours', () => { if (!clipFp) return false; const now = imageFp(clipboard.readImage()); return !!now && now === clipFp; });
 // obraz przeciągnięty z przeglądarki internetowej: okno nie pobierze go samo (CORS), więc pobiera proces główny
 ipcMain.handle('url-fetch', async (e, url) => {
   if (!/^https?:\/\//i.test(url)) throw new Error('zły adres');
