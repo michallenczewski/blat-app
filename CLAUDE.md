@@ -1,14 +1,11 @@
 # Blat — wskazówki dla asystenta
 
-Blat to lekka tablica na referencje i szkice koncepcji, samodzielny program w języku wizualnym Gapy. Ten plik zawiera tylko zasady. Procedury są w `.claude/skills/`, stali pomocnicy w `.claude/agents/`, opis budowy w `ARCHITEKTURA.md`.
+Blat to lekka tablica na referencje i szkice koncepcji, samodzielny program w języku wizualnym Gapy. Ten plik zawiera tylko zasady Blatu; zasady wspólne dla wszystkich programów Michała (współpraca, interfejs, ikony, wydania, technika) są w `../rodzina/claude/CLAUDE.md` — na Macu wczytują się same jako `~/.claude/CLAUDE.md`; jeśli ich nie widzisz, przeczytaj ten plik. Procedury są w `.claude/skills/`, stali pomocnicy w `.claude/agents/`, opis budowy w `ARCHITEKTURA.md`.
 
 ## Współpraca
 
-- Rozmawiamy po polsku. Właściciel (Michał) woli pełne zdania niż skróty oraz oszczędny, nieozdobny wygląd interfejsu, taki jak w Gapie.
-- Zmiany commituj i wypychaj sam, ale **nie wydawaj nowej wersji po każdej poprawce**. Wersję wydajemy tylko wtedy, gdy Michał o to poprosi (umiejętność `wydanie`).
 - W interfejsie i w README mówimy „blat” (blaty, nowy blat), nigdy „tablica”. W kodzie zostają angielskie nazwy (`board`), a po angielsku „board”.
-- Animacje, reakcje przycisków i podpowiedzi według `projekt/WYTYCZNE_INTERAKCJE.md` (wspólne dla całej rodziny programów).
-- Opisy skrótów i podpowiedzi muszą się zgadzać dla Maca (⌘, ⌥, Finder) i Windows (Ctrl, Alt, Eksplorator).
+- Animacje, reakcje przycisków, podpowiedzi i okienka: umiejętność `rodzina-interfejs` (wytyczne i wzorzec przycisków leżą w `../rodzina/`). W opisach dla Maca i Windows: Finder / Eksplorator.
 - Najważniejsze są szybkość i płynność, także przy setkach obrazów na jednej tablicy.
 
 ## Jak pracujemy
