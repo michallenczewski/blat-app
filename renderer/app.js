@@ -1401,7 +1401,7 @@ document.addEventListener('pointerdown', e => {
   addEventListener('pointerup', up); addEventListener('pointercancel', up);
 });
 /* ---------- podpowiedzi przy przyciskach ---------- */
-// zamiast systemowego dymka: po 1,5 s bez ruchu pod przyciskiem pojawia się nazwa i skrót; między sąsiednimi przyciskami od razu
+// zamiast systemowego dymka: po 0,5 s bez ruchu pod przyciskiem pojawia się nazwa i skrót; między sąsiednimi przyciskami od razu
 let hintT = 0, hintEl = null, hintLast = 0;
 function hintShow(el) {
   const h = $('#hint'), t = el.dataset.tip || ''; if (!t) return;
@@ -1418,7 +1418,7 @@ document.addEventListener('pointerover', e => {
   const el = e.target.closest && e.target.closest('.ib'); if (!el || el === hintEl) return;
   if (el.title) { el.dataset.tip = el.title; el.removeAttribute('title'); }   // systemowy dymek nie dubluje naszego
   hintHide(); hintEl = el;
-  hintT = setTimeout(() => { if (hintEl === el) hintShow(el); }, Date.now() - hintLast < 400 ? 0 : 1500);
+  hintT = setTimeout(() => { if (hintEl === el) hintShow(el); }, Date.now() - hintLast < 400 ? 0 : 500);
 });
 document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.ib'); if (el && el === hintEl && !el.contains(e.relatedTarget)) hintHide(); });
 // opis zmieniony przez program (przypinka, motyw, pełny ekran…) też trafia do data-tip, bez systemowego dymka
@@ -1684,8 +1684,8 @@ window.blatTest = {
     { const b = $('#arrangeBtn'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); dispatchEvent(new PointerEvent('pointerup', { button: 0 }));
       ok(b.classList.contains('wcis'), 'po szybkim kliknięciu przycisk zostaje chwilę wciśnięty'); await new Promise(r => setTimeout(r, 160)); ok(!b.classList.contains('wcis'), 'i wraca'); }
     // podpowiedź po zatrzymaniu kursora na narzędziu
-    { hintLast = 0; const b = $('#tools .ib[data-tool="pen"]'); b.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })); await new Promise(r => setTimeout(r, 700));
-      ok(!$('#hint').classList.contains('on'), 'opis nie pojawia się przed upływem 1,5 s'); await new Promise(r => setTimeout(r, 900));
+    { hintLast = 0; const b = $('#tools .ib[data-tool="pen"]'); b.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })); await new Promise(r => setTimeout(r, 250));
+      ok(!$('#hint').classList.contains('on'), 'opis nie pojawia się przed upływem 0,5 s'); await new Promise(r => setTimeout(r, 450));
       const h = $('#hint'); ok(h && h.classList.contains('on') && h.textContent.includes(_t('Mazak')) && !b.title, 'po zatrzymaniu kursora na narzędziu pojawia się jego opis');
       b.dispatchEvent(new PointerEvent('pointerout', { bubbles: true })); await new Promise(r => setTimeout(r, 50)); ok(h && !h.classList.contains('on'), 'opis znika po zjechaniu z narzędzia'); }
     // ===== audyt 27.11.2026 =====
